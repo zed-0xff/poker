@@ -16,81 +16,6 @@ const Version = "1.0"
 var ScriptMode = false
 var Verbosity = 0
 
-var (
-	kernel32                     = windows.NewLazySystemDLL("kernel32.dll")
-	procCloseHandle              = kernel32.NewProc("CloseHandle")
-	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
-	procOpenProcess              = kernel32.NewProc("OpenProcess")
-	procProcess32Next            = kernel32.NewProc("Process32NextW")
-	procVirtualQueryEx           = kernel32.NewProc("VirtualQueryEx")
-	getSystemInfo                = kernel32.NewProc("GetSystemInfo")
-)
-
-type MEMORY_BASIC_INFORMATION struct {
-	BaseAddress       uintptr
-	AllocationBase    uintptr
-	AllocationProtect uint32
-	RegionSize        uintptr
-	State             uint32
-	Protect           uint32
-	Type              uint32
-}
-
-func (mbi MEMORY_BASIC_INFORMATION) isReadable() bool {
-	if mbi.State != windows.MEM_COMMIT {
-		return false
-	}
-
-	if mbi.Protect&windows.PAGE_GUARD != 0 {
-		return false
-	}
-
-	if mbi.Protect&windows.PAGE_READONLY != 0 {
-		return true
-	}
-
-	if mbi.Protect&windows.PAGE_READWRITE != 0 {
-		return true
-	}
-
-	if mbi.Protect&windows.PAGE_EXECUTE_READ != 0 {
-		return true
-	}
-
-	if mbi.Protect&windows.PAGE_EXECUTE_READWRITE != 0 {
-		return true
-	}
-
-	if mbi.Protect&windows.PAGE_EXECUTE_WRITECOPY != 0 {
-		return true
-	}
-
-	return false
-}
-
-type PROCESSENTRY32 struct {
-	Size              uint32
-	Usage             uint32
-	ProcessID         uint32
-	DefaultHeapID     uintptr
-	ModuleID          uint32
-	CountThreads      uint32
-	ParentProcessID   uint32
-	PriorityClassBase int32
-	Flags             uint32
-	ExeFile           [windows.MAX_PATH]uint16
-}
-
-type systemInfo struct {
-	ProcessorArchitecture     uint16
-	_                         uint16
-	PageSize                  uint32
-	_                         [3]uint32
-	MinimumApplicationAddress uintptr
-	MaximumApplicationAddress uintptr
-	_                         uint32
-}
-
 type Pattern []int // -1 means wildcard
 
 func (p Pattern) String() string {
@@ -140,52 +65,6 @@ func ParsePattern(src string) Pattern {
 	}
 
 	return pattern
-}
-
-func createToolhelp32Snapshot(flags, processID uint32) (syscall.Handle, error) {
-	ret, _, err := procCreateToolhelp32Snapshot.Call(uintptr(flags), uintptr(processID))
-	if ret == uintptr(syscall.InvalidHandle) {
-		return syscall.InvalidHandle, err
-	}
-	return syscall.Handle(ret), nil
-}
-
-func process32Next(snapshot syscall.Handle, pe *PROCESSENTRY32) error {
-	ret, _, err := procProcess32Next.Call(uintptr(snapshot), uintptr(unsafe.Pointer(pe)))
-	if ret == 0 {
-		return err
-	}
-	return nil
-}
-
-func closeHandle(handle windows.Handle) {
-	procCloseHandle.Call(uintptr(handle))
-}
-
-func openProcess(dwDesiredAccess uint32, bInheritHandle uint32, dwProcessId uint32) (windows.Handle, error) {
-	ret, _, err := procOpenProcess.Call(
-		uintptr(dwDesiredAccess),
-		uintptr(bInheritHandle),
-		uintptr(dwProcessId),
-	)
-	if ret == 0 {
-		return windows.Handle(0), err
-	}
-	return windows.Handle(ret), nil
-}
-
-func virtualQueryEx(hProcess windows.Handle, lpAddress uintptr) (MEMORY_BASIC_INFORMATION, error) {
-	var mbi MEMORY_BASIC_INFORMATION
-	ret, _, err := procVirtualQueryEx.Call(
-		uintptr(hProcess),
-		lpAddress,
-		uintptr(unsafe.Pointer(&mbi)),
-		uintptr(unsafe.Sizeof(mbi)),
-	)
-	if ret != uintptr(unsafe.Sizeof(mbi)) {
-		return mbi, err
-	}
-	return mbi, nil
 }
 
 func prot2str(prot uint32) string {
@@ -247,7 +126,7 @@ func createSparseFile(fname string) {
 	}
 }
 
-func DumpAll(pid uint64) {
+func DumpAll(pid uint32) {
 	fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", pid)
 
 	fname := fmt.Sprintf("pid_%d_sparse.bin", pid)
@@ -300,7 +179,7 @@ func DumpAll(pid uint64) {
 	fmt.Printf("[=] %s (%d bytes)\n", fname, totalWritten)
 }
 
-func DumpRegion(pid uint64, target_ea uintptr) {
+func DumpRegion(pid uint32, target_ea uintptr) {
 	fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, pid)
 
 	EnumProcessRegions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
@@ -356,7 +235,7 @@ func ShowRegion(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
 	)
 }
 
-func EnumProcessRegions(pid uint64, openMode uint32, callback func(MEMORY_BASIC_INFORMATION, windows.Handle)) error {
+func EnumProcessRegions(pid uint32, openMode uint32, callback func(MEMORY_BASIC_INFORMATION, windows.Handle)) error {
 	hProcess, err := openProcess(
 		openMode,
 		0,
@@ -386,12 +265,12 @@ func EnumProcessRegions(pid uint64, openMode uint32, callback func(MEMORY_BASIC_
 	return nil
 }
 
-func ShowProcessRegions(pid uint64) {
+func ShowProcessRegions(pid uint32) {
 	fmt.Printf("[.] Memory regions of PID %d: (only MEM_COMMIT ones)\n", pid)
 	EnumProcessRegions(pid, windows.PROCESS_QUERY_INFORMATION, ShowRegion)
 }
 
-func FindFirstEx(pid uint64, region_type uint32, region_prot uint32, pattern Pattern) []byte {
+func FindFirstEx(pid uint32, region_type uint32, region_prot uint32, pattern Pattern) []byte {
 	buffer := make([]byte, 0x1000)
 
 	found_offset := -1
@@ -442,7 +321,7 @@ func FindFirstEx(pid uint64, region_type uint32, region_prot uint32, pattern Pat
 	}
 }
 
-func FindPattern(pid uint64, pattern Pattern) {
+func FindPattern(pid uint32, pattern Pattern) {
 	fmt.Printf("[.] Searching for %d bytes in PID %d ..\n", len(pattern), pid)
 
 	EnumProcessRegions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
@@ -541,55 +420,10 @@ func HexDump(buffer []byte, ea uintptr) {
 	}
 }
 
-func ShowProcessMemory(pid uint64, ea uintptr, size int) {
+func ShowProcessMemory(pid uint32, ea uintptr, size int) {
 	data := ReadProcessMemory(pid, ea, size)
 	if data != nil {
 		HexDump(data, ea)
-	}
-}
-
-func ReadProcessMemory(pid uint64, ea uintptr, size int) []byte {
-	buffer := make([]byte, size)
-	done := false
-
-	EnumProcessRegions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
-		if done {
-			return
-		}
-
-		if !mbi.isReadable() {
-			return
-		}
-
-		if ea >= mbi.BaseAddress && ea < mbi.BaseAddress+uintptr(mbi.RegionSize) {
-			ShowRegion(mbi, hProcess)
-
-			var bytesRead uintptr
-
-			err := windows.ReadProcessMemory(
-				hProcess,
-				ea,
-				&buffer[0],
-				uintptr(size),
-				&bytesRead,
-			)
-			if err != nil {
-				panic(err)
-			}
-
-			done = int(bytesRead) == size
-		}
-	})
-
-	if ScriptMode && !done {
-		fmt.Printf("[!] failed to read %d bytes at %x\n", size, ea)
-		os.Exit(1)
-	}
-
-	if done {
-		return buffer
-	} else {
-		return nil
 	}
 }
 
@@ -617,7 +451,7 @@ func ShowProcesses() {
 }
 
 // returns PID or 0 if not found
-func FindProcess(processName string) uint64 {
+func FindProcess(processName string) uint32 {
 	processName = strings.ToLower(processName)
 
 	var pe PROCESSENTRY32
@@ -632,7 +466,7 @@ func FindProcess(processName string) uint64 {
 
 	for {
 		if strings.ToLower(windows.UTF16ToString(pe.ExeFile[:])) == processName {
-			return uint64(pe.ProcessID)
+			return pe.ProcessID
 		}
 
 		err := process32Next(snapshot, &pe)
@@ -644,9 +478,8 @@ func FindProcess(processName string) uint64 {
 	return 0
 }
 
-func ParsePidOrExe(pid_or_exename string) uint64 {
-	var pid uint64 = 0
-	var err error
+func ParsePidOrExe(pid_or_exename string) uint32 {
+	var pid uint32 = 0
 
 	if strings.HasSuffix(pid_or_exename, ".exe") {
 		pid = FindProcess(pid_or_exename)
@@ -654,10 +487,11 @@ func ParsePidOrExe(pid_or_exename string) uint64 {
 			panic("Process not found: " + pid_or_exename)
 		}
 	} else {
-		pid, err = strconv.ParseUint(pid_or_exename, 10, 32)
+		val, err := strconv.ParseUint(pid_or_exename, 10, 32)
 		if err != nil {
 			panic("Invalid PID:" + pid_or_exename)
 		}
+		pid = uint32(val)
 	}
 	return pid
 }

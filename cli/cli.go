@@ -22,6 +22,7 @@ func usage() {
 		"    dumper <pid_or_exename> find <bytes>\n",
 		"    dumper <pid_or_exename> show <addr> [size]\n",
 		"    dumper <pid_or_exename> read <addr> <size>\n",
+		"    dumper <pid_or_exename> write_uint32 <addr> <value>\n",
 	)
 }
 
@@ -137,6 +138,17 @@ func run(args []string) []byte {
 			}
 		}
 		return result
+	case "write_uint32":
+		if len(args) != 2 {
+			usage()
+			os.Exit(1)
+		}
+		ea := uintptr(parseHex(args[0], "ea"))
+		value := uint32(parseHex(args[1], "value"))
+		err := dumper.WriteUInt32(pid, ea, value)
+		if err != nil {
+			panic(err)
+		}
 	default:
 		fmt.Println("[?] Invalid command:", arg)
 		usage()
