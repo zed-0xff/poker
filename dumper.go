@@ -7,7 +7,6 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
-    "encoding/binary"
 
 	"golang.org/x/sys/windows"
 )
@@ -97,52 +96,52 @@ type systemInfo struct {
 type Pattern []int // -1 means wildcard
 
 func (p Pattern) String() string {
-    s := ""
-    for _, c := range p {
-        if c == -1 {
-            s += "?? "
-        } else {
-            s += fmt.Sprintf("%02X ", c)
-        }
-    }
-    return strings.TrimSpace(s)
+	s := ""
+	for _, c := range p {
+		if c == -1 {
+			s += "?? "
+		} else {
+			s += fmt.Sprintf("%02X ", c)
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
-func (p Pattern) Find(buffer* []byte) int {
-    for i := 0; i < len(*buffer); i++ {
-        if p[0] == -1 || int((*buffer)[i]) == p[0] {
-            found := true
-            for j := 1; j < len(p); j++ {
-                if i+j >= len(*buffer) || (p[j] != -1 && int((*buffer)[i+j]) != p[j]) {
-                    found = false
-                    break
-                }
-            }
-            if found {
-                return i
-            }
-        }
-    }
-    return -1
+func (p Pattern) Find(buffer *[]byte) int {
+	for i := 0; i < len(*buffer); i++ {
+		if p[0] == -1 || int((*buffer)[i]) == p[0] {
+			found := true
+			for j := 1; j < len(p); j++ {
+				if i+j >= len(*buffer) || (p[j] != -1 && int((*buffer)[i+j]) != p[j]) {
+					found = false
+					break
+				}
+			}
+			if found {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func parsePattern(src string) Pattern {
-    pattern := Pattern{}
+	pattern := Pattern{}
 
-    for _, c := range strings.Split(src, " ") {
-        // convert each arg from hex to byte
-        if c == "?" || c == "??" {
-            pattern = append(pattern, -1)
-        } else {
-            x, err := strconv.ParseUint(string(c), 16, 8)
-            if err != nil {
-                panic(err)
-            }
-            pattern = append(pattern, int(x))
-        }
-    }
+	for _, c := range strings.Split(src, " ") {
+		// convert each arg from hex to byte
+		if c == "?" || c == "??" {
+			pattern = append(pattern, -1)
+		} else {
+			x, err := strconv.ParseUint(string(c), 16, 8)
+			if err != nil {
+				panic(err)
+			}
+			pattern = append(pattern, int(x))
+		}
+	}
 
-    return pattern
+	return pattern
 }
 
 func createToolhelp32Snapshot(flags, processID uint32) (syscall.Handle, error) {
@@ -362,9 +361,9 @@ func showRegion(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
 	if mbi.State != windows.MEM_COMMIT {
 		return
 	}
-    if g_verbosity < 0 {
-        return
-    }
+	if g_verbosity < 0 {
+		return
+	}
 
 	fmt.Printf(
 		"    ba:%12X size:%9X state:%8X type:%8X prot: %4X %s\n",
@@ -405,23 +404,23 @@ func showRegions(pid uint64) {
 }
 
 func findFirstEx(pid uint64, region_type uint32, region_prot uint32, pattern Pattern) []byte {
-    buffer := make([]byte, 0x1000)
+	buffer := make([]byte, 0x1000)
 
-    found_offset := -1
+	found_offset := -1
 
 	enumRegions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
-        if found_offset != -1 {
-            return
-        }
+		if found_offset != -1 {
+			return
+		}
 
 		if !mbi.isReadable() || mbi.Protect != region_prot || mbi.Type != region_type {
 			return
 		}
 
 		var bytesRead uintptr = mbi.RegionSize
-        if int(mbi.RegionSize) > len(buffer) {
-            buffer = make([]byte, mbi.RegionSize)
-        }
+		if int(mbi.RegionSize) > len(buffer) {
+			buffer = make([]byte, mbi.RegionSize)
+		}
 
 		err := windows.ReadProcessMemory(
 			hProcess,
@@ -434,25 +433,25 @@ func findFirstEx(pid uint64, region_type uint32, region_prot uint32, pattern Pat
 			panic(err)
 		}
 
-        if bytesRead <= 0 {
-            return
-        }
+		if bytesRead <= 0 {
+			return
+		}
 
-        found_offset = pattern.Find(&buffer)
+		found_offset = pattern.Find(&buffer)
 	})
 
-    if found_offset == -1 {
-        if g_script {
-            fmt.Printf("[!] pattern not found: %s\n", pattern)
-            os.Exit(1)
-        }
-        return nil
-    } else {
-        if g_debug {
-            fmt.Printf("[d] found_offset: %x\n", found_offset)
-        }
-        return buffer[found_offset:found_offset+len(pattern)]
-    }
+	if found_offset == -1 {
+		if g_script {
+			fmt.Printf("[!] pattern not found: %s\n", pattern)
+			os.Exit(1)
+		}
+		return nil
+	} else {
+		if g_debug {
+			fmt.Printf("[d] found_offset: %x\n", found_offset)
+		}
+		return buffer[found_offset : found_offset+len(pattern)]
+	}
 }
 
 func findPattern(pid uint64, pattern Pattern) {
@@ -555,20 +554,20 @@ func hexDump(buffer []byte, ea uintptr) {
 }
 
 func showMem(pid uint64, ea uintptr, size int) {
-    data := readMem(pid, ea, size)
-    if data != nil {
-        hexDump(data, ea)
-    }
+	data := readMem(pid, ea, size)
+	if data != nil {
+		hexDump(data, ea)
+	}
 }
 
 func readMem(pid uint64, ea uintptr, size int) []byte {
-    buffer := make([]byte, size)
-    done := false
+	buffer := make([]byte, size)
+	done := false
 
 	enumRegions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
-        if done {
-            return
-        }
+		if done {
+			return
+		}
 
 		if !mbi.isReadable() {
 			return
@@ -577,7 +576,7 @@ func readMem(pid uint64, ea uintptr, size int) []byte {
 		if ea >= mbi.BaseAddress && ea < mbi.BaseAddress+uintptr(mbi.RegionSize) {
 			showRegion(mbi, hProcess)
 
-			var bytesRead uintptr;
+			var bytesRead uintptr
 
 			err := windows.ReadProcessMemory(
 				hProcess,
@@ -594,16 +593,16 @@ func readMem(pid uint64, ea uintptr, size int) []byte {
 		}
 	})
 
-    if g_script && !done {
-        fmt.Printf("[!] failed to read %d bytes at %x\n", size, ea)
-        os.Exit(1)
-    }
+	if g_script && !done {
+		fmt.Printf("[!] failed to read %d bytes at %x\n", size, ea)
+		os.Exit(1)
+	}
 
-    if done {
-        return buffer
-    } else {
-        return nil
-    }
+	if done {
+		return buffer
+	} else {
+		return nil
+	}
 }
 
 func showProcesses() {
@@ -678,7 +677,7 @@ func parsePidOrExe(pid_or_exename string) uint64 {
 
 func usage() {
 	fmt.Print(
-        "Universal memory patcher/dumper v", VERSION, " by zed_0xff\n",
+		"Universal memory patcher/dumper v", VERSION, " by zed_0xff\n",
 		"Usage:\n",
 		"    dumper ps\n",
 		"    dumper <pid_or_exename> list\n",
@@ -691,34 +690,34 @@ func usage() {
 }
 
 func parseHex(s string, title string) uint64 {
-    if strings.HasPrefix(s, "0x") {
-        s = s[2:]
-    }
-    x, err := strconv.ParseUint(s, 16, 64)
-    if err != nil {
-        fmt.Printf("[?] Invalid %s: %s\n", title, s)
-        os.Exit(1)
-    }
-    return x
+	if strings.HasPrefix(s, "0x") {
+		s = s[2:]
+	}
+	x, err := strconv.ParseUint(s, 16, 64)
+	if err != nil {
+		fmt.Printf("[?] Invalid %s: %s\n", title, s)
+		os.Exit(1)
+	}
+	return x
 }
 
 func pop(args *[]string) string {
-    arg := (*args)[0]
-    *args = (*args)[1:]
-    return arg
+	arg := (*args)[0]
+	*args = (*args)[1:]
+	return arg
 }
 
 func run(args []string) []byte {
-    if g_debug {
-        fmt.Println("[d] run(", args, ")")
-    }
+	if g_debug {
+		fmt.Println("[d] run(", args, ")")
+	}
 
 	if args[0] == "ps" {
 		showProcesses()
 		return nil
 	}
 
-    arg := pop(&args)
+	arg := pop(&args)
 	pid := parsePidOrExe(arg)
 	if pid == 0 {
 		fmt.Println("Process not found:", arg)
@@ -730,14 +729,14 @@ func run(args []string) []byte {
 		return nil
 	}
 
-    arg = strings.ToLower(pop(&args))
+	arg = strings.ToLower(pop(&args))
 
-    switch arg {
+	switch arg {
 	case "list":
-        if len(args) != 0 {
-            usage()
-            os.Exit(1)
-        }
+		if len(args) != 0 {
+			usage()
+			os.Exit(1)
+		}
 		showRegions(pid)
 	case "dump":
 		if len(args) == 0 {
@@ -756,52 +755,52 @@ func run(args []string) []byte {
 		}
 		pattern := parsePattern(strings.Join(args[1:], " "))
 		findPattern(pid, pattern)
-    case "findfirstex":
+	case "findfirstex":
 		if len(args) < 3 {
 			usage()
 			os.Exit(1)
 		}
 
-        region_type := parseHex(args[0], "region_type")
-        region_prot := parseHex(args[1], "region_prot")
+		region_type := parseHex(args[0], "region_type")
+		region_prot := parseHex(args[1], "region_prot")
 		pattern := parsePattern(strings.Join(args[2:], " "))
-        result := findFirstEx(pid, uint32(region_type), uint32(region_prot), pattern)
-        if !g_script || g_debug {
-            if result != nil {
-                hexDump(result, 0)
-            }
-        }
-        return result
+		result := findFirstEx(pid, uint32(region_type), uint32(region_prot), pattern)
+		if !g_script || g_debug {
+			if result != nil {
+				hexDump(result, 0)
+			}
+		}
+		return result
 	case "show":
 		if len(args) > 2 {
 			usage()
 			os.Exit(1)
 		}
-        size := 0x100
-        if len(args) == 2 {
-            size = int(parseHex(args[1], "size"))
-        }
+		size := 0x100
+		if len(args) == 2 {
+			size = int(parseHex(args[1], "size"))
+		}
 		ea := uintptr(parseHex(args[0], "address"))
 		showMem(pid, ea, size)
 
-    case "read":
-        if len(args) != 2 {
-            usage()
-            os.Exit(1)
-        }
+	case "read":
+		if len(args) != 2 {
+			usage()
+			os.Exit(1)
+		}
 
-        result := readMem(pid, uintptr(parseHex(args[0], "ea")), int(parseHex(args[1], "size")))
-        if !g_script {
-            if result != nil {
-                os.Stdout.Write(result)
-            }
-        }
-        return result
+		result := readMem(pid, uintptr(parseHex(args[0], "ea")), int(parseHex(args[1], "size")))
+		if !g_script {
+			if result != nil {
+				os.Stdout.Write(result)
+			}
+		}
+		return result
 	default:
-        fmt.Println("[?] Invalid command:", arg)
+		fmt.Println("[?] Invalid command:", arg)
 		usage()
 		os.Exit(1)
 	}
 
-    return nil
+	return nil
 }
