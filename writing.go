@@ -1,14 +1,17 @@
 package dumper
 
 import (
+	"fmt"
+
 	"golang.org/x/sys/windows"
 )
 
 // writes only to writable regions
 func WriteProcessMemory(pid uint32, ea uintptr, buffer []byte) error {
-	hProcess, err := openProcess(windows.PROCESS_VM_WRITE, 0, pid)
+	// Access denied if using only PROCESS_VM_WRITE
+	hProcess, err := openProcess(windows.PROCESS_VM_WRITE|windows.PROCESS_VM_OPERATION, 0, pid)
 	if err != nil {
-		return err
+		return fmt.Errorf("openProcess: %v", err)
 	}
 	defer closeHandle(hProcess)
 
@@ -24,7 +27,7 @@ func WriteProcessMemory(pid uint32, ea uintptr, buffer []byte) error {
 	)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("WriteProcessMemory: %v", err)
 	}
 
 	return nil
