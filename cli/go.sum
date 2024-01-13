@@ -1,0 +1,4 @@
+github.com/zed-0xff/dumper v0.0.0-20240113184259-d4c6a244e30d h1:7GpEMRP86OQhIf4vgQQP2A0UsQK/ndxDjsSw/04wuVo=
+github.com/zed-0xff/dumper v0.0.0-20240113184259-d4c6a244e30d/go.mod h1:20fENYXSYRpRVan9tyOi7x9LFPfo157V02TcyC1UGX4=
+golang.org/x/sys v0.16.0 h1:xWw16ngr6ZMtmxDyKyIgsE93KNKz5HKmMa3b8ALHidU=
+golang.org/x/sys v0.16.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
