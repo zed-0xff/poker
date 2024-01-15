@@ -27,7 +27,7 @@ type MEMORY_BASIC_INFORMATION struct {
 	Type              uint32
 }
 
-func (mbi MEMORY_BASIC_INFORMATION) isReadable() bool {
+func (mbi MEMORY_BASIC_INFORMATION) IsReadable() bool {
 	if mbi.State != windows.MEM_COMMIT {
 		return false
 	}

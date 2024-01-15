@@ -9,48 +9,20 @@ import (
 )
 
 func ReadProcessMemory(pid uint32, ea uintptr, size int) []byte {
-	buffer := make([]byte, size)
-	done := false
-
-	EnumProcessRegions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
-		if done {
-			return
+	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
+		if ea < region.Metadata.BaseAddress || ea >= region.Metadata.BaseAddress+uintptr(region.Metadata.RegionSize) {
+			continue
 		}
 
-		if !mbi.isReadable() {
-			return
-		}
+		return region.Read(ea, size)
+	}
 
-		if ea >= mbi.BaseAddress && ea < mbi.BaseAddress+uintptr(mbi.RegionSize) {
-			ShowRegion(mbi, hProcess)
-
-			var bytesRead uintptr
-
-			err := windows.ReadProcessMemory(
-				hProcess,
-				ea,
-				&buffer[0],
-				uintptr(size),
-				&bytesRead,
-			)
-			if err != nil {
-				panic(err)
-			}
-
-			done = int(bytesRead) == size
-		}
-	})
-
-	if ScriptMode && !done {
+	if ScriptMode {
 		fmt.Printf("[!] failed to read %d bytes at %x\n", size, ea)
 		os.Exit(1)
 	}
 
-	if done {
-		return buffer
-	} else {
-		return nil
-	}
+	return nil
 }
 
 func ReadUInt32(pid uint32, ea uintptr) uint32 {
