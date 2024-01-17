@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const Version = "0.2.1"
+const Version = "0.3.0"
 
 var ScriptMode = false
 var Verbosity = 0
@@ -170,17 +170,21 @@ func EnumProcessRegions(pid uint32, openMode uint32, callback func(MEMORY_BASIC_
 	var si systemInfo
 	getSystemInfo.Call(uintptr(unsafe.Pointer(&si)))
 
-	for ea := si.MinimumApplicationAddress; ea < si.MaximumApplicationAddress; {
+	if Verbosity > 1 {
+		fmt.Printf("[d] MinimumApplicationAddress=%x, MaximumApplicationAddress=%x\n", si.MinimumApplicationAddress, si.MaximumApplicationAddress)
+	}
+
+	for ea := uintptr(0); ea < si.MaximumApplicationAddress; {
 		mbi, err := virtualQueryEx(hProcess, ea)
 		if err != nil {
+			if Verbosity > 1 {
+				fmt.Printf("[!] virtualQueryEx failed: %s\n", err)
+			}
 			panic(err)
-		}
-		if mbi.BaseAddress+uintptr(mbi.RegionSize)-1 > si.MaximumApplicationAddress {
-			break
 		}
 		callback(mbi, hProcess)
 
-		ea = mbi.BaseAddress + uintptr(mbi.RegionSize)
+		ea += uintptr(mbi.RegionSize)
 	}
 
 	return nil
