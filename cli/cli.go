@@ -96,9 +96,9 @@ func run(args []string) []byte {
 			os.Exit(1)
 		}
 		pattern := dumper.ParsePattern(args[0])
-        for match := range dumper.FindEach(pid, pattern) {
-            fmt.Printf("%x\n", match)
-        }
+		for match := range dumper.FindEach(pid, pattern) {
+			fmt.Printf("%x\n", match)
+		}
 	case "findfirstex":
 		if len(args) < 3 {
 			usage()
