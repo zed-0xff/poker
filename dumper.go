@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const Version = "1.0"
+const Version = "0.2.1"
 
 var ScriptMode = false
 var Verbosity = 0
@@ -197,9 +197,16 @@ func ShowProcessRegions(pid uint32) {
 	}
 }
 
+// zero region_type or region_prot means ANY READABLE region
 func FindFirstEx(pid uint32, region_type uint32, region_prot uint32, pattern Pattern) []byte {
 	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
-		if !region.IsReadable() || region.Metadata.Protect != region_prot || region.Metadata.Type != region_type {
+		if !region.IsReadable() {
+			continue
+		}
+		if region_type != 0 && region.Metadata.Type != region_type {
+			continue
+		}
+		if region_prot != 0 && region.Metadata.Protect != region_prot {
 			continue
 		}
 
