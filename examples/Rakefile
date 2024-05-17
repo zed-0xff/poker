@@ -1,0 +1,11 @@
+task :default => [:build]
+
+desc "build examples"
+task :build do
+  ENV['GOOS'] = 'windows'
+  ENV['GOARCH'] = '386'
+  Dir["*.go"].each do |go_fname|
+    exe_fname = go_fname.gsub(/\.go$/, '.exe')
+    sh "rm -f #{exe_fname}; go build -o #{exe_fname} #{go_fname}"
+  end
+end

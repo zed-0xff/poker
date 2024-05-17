@@ -2,57 +2,39 @@ package dumper
 
 import (
 	"fmt"
-	"os"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-func ReadProcessMemory(pid uint32, ea uintptr, size int) []byte {
-	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
-		if ea < region.Metadata.BaseAddress || ea >= region.Metadata.BaseAddress+uintptr(region.Metadata.RegionSize) {
-			continue
-		}
-
-		return region.Read(ea, size)
+func (p *Process) ReadMemory(ea, size uintptr) []byte {
+	lp := p.MaybeReopen(windows.PROCESS_VM_READ)
+	if lp != p {
+		defer lp.Close()
 	}
 
-	if ScriptMode {
-		fmt.Printf("[!] failed to read %d bytes at %x\n", size, ea)
-		os.Exit(1)
+	var bytesRead uintptr = uintptr(size)
+	buf := make([]byte, size)
+	err := windows.ReadProcessMemory(
+		lp.Handle,
+		ea,
+		&buf[0],
+		size,
+		&bytesRead,
+	)
+	if err != nil {
+		panic(fmt.Errorf("ReadProcessMemory: %v", err))
 	}
 
-	return nil
+	return buf[:bytesRead]
 }
 
-func ReadUInt32(pid uint32, ea uintptr) uint32 {
-	buffer := ReadProcessMemory(pid, ea, 4)
-	if buffer != nil {
-		return *(*uint32)(unsafe.Pointer(&buffer[0]))
-	} else {
-		msg := fmt.Sprintf("failed to read 4 bytes at %x", ea)
-		if ScriptMode {
-			fmt.Printf("[!] %s\n", msg)
-			os.Exit(1)
-		} else {
-			panic(msg)
-		}
-		return 0
-	}
+func (p *Process) ReadUInt32(ea uintptr) uint32 {
+	buf := p.ReadMemory(ea, 4)
+	return *(*uint32)(unsafe.Pointer(&buf[0]))
 }
 
-func ReadUInt64(pid uint32, ea uintptr) uint64 {
-	buffer := ReadProcessMemory(pid, ea, 8)
-	if buffer != nil {
-		return *(*uint64)(unsafe.Pointer(&buffer[0]))
-	} else {
-		msg := fmt.Sprintf("failed to read 8 bytes at %x", ea)
-		if ScriptMode {
-			fmt.Printf("[!] %s\n", msg)
-			os.Exit(1)
-		} else {
-			panic(msg)
-		}
-		return 0
-	}
+func (p *Process) ReadUInt64(ea uintptr) uint64 {
+	buf := p.ReadMemory(ea, 8)
+	return *(*uint64)(unsafe.Pointer(&buf[0]))
 }

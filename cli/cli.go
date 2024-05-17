@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+    "golang.org/x/sys/windows"
 	"github.com/zed-0xff/dumper"
 )
 
@@ -66,8 +67,11 @@ func run(args []string) []byte {
 		os.Exit(1)
 	}
 
+    process := dumper.OpenProcess(pid, windows.PROCESS_QUERY_INFORMATION | windows.PROCESS_VM_READ);
+    defer process.Close()
+
 	if len(args) == 0 {
-		dumper.ShowProcessRegions(pid)
+		process.ShowRegions()
 		return nil
 	}
 
@@ -79,16 +83,16 @@ func run(args []string) []byte {
 			usage()
 			os.Exit(1)
 		}
-		dumper.ShowProcessRegions(pid)
+		process.ShowRegions()
 	case "dump":
 		if len(args) == 0 {
 			usage()
 			os.Exit(1)
 		}
 		if args[0] == "all" {
-			dumper.DumpAll(pid)
+			process.DumpAll()
 		} else {
-			dumper.DumpRegion(pid, uintptr(parseHex(args[0], "address")))
+			process.DumpRegion(uintptr(parseHex(args[0], "address")))
 		}
 	case "find":
 		if len(args) != 1 {
@@ -96,7 +100,7 @@ func run(args []string) []byte {
 			os.Exit(1)
 		}
 		pattern := dumper.ParsePattern(args[0])
-		for match := range dumper.FindEach(pid, pattern) {
+		for match := range process.FindEach(pattern) {
 			fmt.Printf("%x\n", match)
 		}
 	case "findfirstex":
@@ -108,7 +112,7 @@ func run(args []string) []byte {
 		region_type := parseHex(args[0], "region_type")
 		region_prot := parseHex(args[1], "region_prot")
 		pattern := dumper.ParsePattern(strings.Join(args[2:], " "))
-		result := dumper.FindFirstEx(pid, uint32(region_type), uint32(region_prot), pattern)
+		result := process.FindFirstEx(uint32(region_type), uint32(region_prot), pattern)
 		if !dumper.ScriptMode || g_debug {
 			if result != nil {
 				dumper.HexDump(result, 0)
@@ -120,12 +124,12 @@ func run(args []string) []byte {
 			usage()
 			os.Exit(1)
 		}
-		size := 0x100
+		size := uintptr(0x100)
 		if len(args) == 2 {
-			size = int(parseHex(args[1], "size"))
+			size = uintptr(parseHex(args[1], "size"))
 		}
 		ea := uintptr(parseHex(args[0], "address"))
-		dumper.ShowProcessMemory(pid, ea, size)
+        dumper.HexDump(process.ReadMemory(ea, size), ea)
 
 	case "read":
 		if len(args) != 2 {
@@ -133,7 +137,7 @@ func run(args []string) []byte {
 			os.Exit(1)
 		}
 
-		result := dumper.ReadProcessMemory(pid, uintptr(parseHex(args[0], "ea")), int(parseHex(args[1], "size")))
+		result := process.ReadMemory(uintptr(parseHex(args[0], "ea")), uintptr(parseHex(args[1], "size")))
 		if !dumper.ScriptMode {
 			if result != nil {
 				os.Stdout.Write(result)
@@ -147,10 +151,7 @@ func run(args []string) []byte {
 		}
 		ea := uintptr(parseHex(args[0], "ea"))
 		value := uint32(parseHex(args[1], "value"))
-		err := dumper.WriteUInt32(pid, ea, value)
-		if err != nil {
-			panic(err)
-		}
+		process.WriteUInt32(ea, value)
 	default:
 		fmt.Println("[?] Invalid command:", arg)
 		usage()

@@ -1,0 +1,7 @@
+task default: %w[build]
+
+desc 'Build'
+task :build do
+  sh 'GOOS=windows GOARCH=386   go build -o dumper32.exe'
+  sh 'GOOS=windows GOARCH=amd64 go build -o dumper64.exe'
+end

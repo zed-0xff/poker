@@ -7,13 +7,22 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	MEM_PRIVATE = 0x20000
+	MEM_MAPPED  = 0x40000
+	MEM_IMAGE   = 0x1000000
+)
+
 var (
 	kernel32                     = windows.NewLazySystemDLL("kernel32.dll")
 	procCloseHandle              = kernel32.NewProc("CloseHandle")
 	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
+	procCreateRemoteThread       = kernel32.NewProc("CreateRemoteThread")
 	procOpenProcess              = kernel32.NewProc("OpenProcess")
+	procLoadLibraryA             = kernel32.NewProc("LoadLibraryA")
 	procProcess32Next            = kernel32.NewProc("Process32NextW")
 	procVirtualQueryEx           = kernel32.NewProc("VirtualQueryEx")
+	procVirtualAllocEx           = kernel32.NewProc("VirtualAllocEx")
 	getSystemInfo                = kernel32.NewProc("GetSystemInfo")
 )
 
@@ -59,7 +68,7 @@ func (mbi MEMORY_BASIC_INFORMATION) IsReadable() bool {
 	return false
 }
 
-func (mbi MEMORY_BASIC_INFORMATION) isWritable() bool {
+func (mbi MEMORY_BASIC_INFORMATION) IsWritable() bool {
 	if mbi.State != windows.MEM_COMMIT {
 		return false
 	}
@@ -96,14 +105,18 @@ type PROCESSENTRY32 struct {
 	ExeFile           [windows.MAX_PATH]uint16
 }
 
-type systemInfo struct {
+type SYSTEM_INFO struct {
 	ProcessorArchitecture     uint16
-	_                         uint16
+	Reserved                  uint16
 	PageSize                  uint32
-	_                         [3]uint32
 	MinimumApplicationAddress uintptr
 	MaximumApplicationAddress uintptr
-	_                         uint32
+	ActiveProcessorMask       uintptr
+	NumberOfProcessors        uint32
+	ProcessorType             uint32
+	AllocationGranularity     uint32
+	ProcessorLevel            uint16
+	ProcessorRevision         uint16
 }
 
 func createToolhelp32Snapshot(flags, processID uint32) (syscall.Handle, error) {
@@ -126,18 +139,6 @@ func closeHandle(handle windows.Handle) {
 	procCloseHandle.Call(uintptr(handle))
 }
 
-func openProcess(dwDesiredAccess uint32, bInheritHandle uint32, dwProcessId uint32) (windows.Handle, error) {
-	ret, _, err := procOpenProcess.Call(
-		uintptr(dwDesiredAccess),
-		uintptr(bInheritHandle),
-		uintptr(dwProcessId),
-	)
-	if ret == 0 {
-		return windows.Handle(0), err
-	}
-	return windows.Handle(ret), nil
-}
-
 func virtualQueryEx(hProcess windows.Handle, lpAddress uintptr) (MEMORY_BASIC_INFORMATION, error) {
 	var mbi MEMORY_BASIC_INFORMATION
 	ret, _, err := procVirtualQueryEx.Call(
@@ -150,4 +151,12 @@ func virtualQueryEx(hProcess windows.Handle, lpAddress uintptr) (MEMORY_BASIC_IN
 		return mbi, err
 	}
 	return mbi, nil
+}
+
+func VirtualAllocEx(hProcess windows.Handle, addr uintptr, size, allocType, protect uint32) (uintptr, error) {
+	ret, _, err := procVirtualAllocEx.Call(uintptr(hProcess), addr, uintptr(size), uintptr(allocType), uintptr(protect))
+	if ret == 0 {
+		return 0, err
+	}
+	return ret, nil
 }

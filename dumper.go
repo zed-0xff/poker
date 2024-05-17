@@ -3,7 +3,7 @@ package dumper
 import (
 	"fmt"
 	"os"
-	"strconv"
+    "strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -106,93 +106,46 @@ func WriteFile(fname string, data []byte) error {
 	return WriteFileEx(fname, data, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0)
 }
 
-func DumpAll(pid uint32) {
-	fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", pid)
+func (process *Process) DumpAll() {
+	fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", process.Pid)
 
-	fname := fmt.Sprintf("pid_%d_sparse.bin", pid)
+	fname := fmt.Sprintf("pid_%d_sparse.bin", process.Pid)
 	totalWritten := 0
 
 	CreateSparseFile(fname)
-	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
+	for _, region := range process.Regions() {
 		if !region.IsReadable() {
 			continue
 		}
 		region.Show()
-		WriteFileEx(fname, region.ReadAll(), os.O_WRONLY|os.O_CREATE, int(region.Metadata.BaseAddress))
-		totalWritten += int(region.Metadata.RegionSize)
+		WriteFileEx(fname, region.ReadAll(), os.O_WRONLY|os.O_CREATE, int(region.MBI.BaseAddress))
+		totalWritten += int(region.MBI.RegionSize)
 	}
 	fmt.Printf("[=] %s (%d bytes)\n", fname, totalWritten)
 }
 
-func DumpRegion(pid uint32, target_ea uintptr) {
-	fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, pid)
+func (process *Process) DumpRegion(target_ea uintptr) {
+	fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, process.Pid)
 
-	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
-		if target_ea < region.Metadata.BaseAddress || target_ea >= region.Metadata.BaseAddress+uintptr(region.Metadata.RegionSize) {
+	for _, region := range process.Regions() {
+		if target_ea < region.MBI.BaseAddress || target_ea >= region.MBI.BaseAddress+uintptr(region.MBI.RegionSize) {
 			continue
 		}
 
 		region.Show()
 
-		fname := fmt.Sprintf("%08X.bin", region.Metadata.BaseAddress)
+		fname := fmt.Sprintf("%08X.bin", region.MBI.BaseAddress)
 		err := WriteFile(fname, region.ReadAll())
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("[=] %s (%d bytes)\n", fname, region.Metadata.RegionSize)
+		fmt.Printf("[=] %s (%d bytes)\n", fname, region.MBI.RegionSize)
 	}
 }
 
-func Regions(pid uint32, mode uint32) chan Region {
-	ch := make(chan Region)
-
-	go func() {
-		EnumProcessRegions(pid, mode, func(mbi MEMORY_BASIC_INFORMATION, hProcess windows.Handle) {
-			ch <- Region{hProcess, mbi}
-		})
-		close(ch)
-	}()
-
-	return ch
-}
-
-func EnumProcessRegions(pid uint32, openMode uint32, callback func(MEMORY_BASIC_INFORMATION, windows.Handle)) error {
-	hProcess, err := openProcess(
-		openMode,
-		0,
-		uint32(pid),
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer closeHandle(hProcess)
-
-	var si systemInfo
-	getSystemInfo.Call(uintptr(unsafe.Pointer(&si)))
-
-	if Verbosity > 1 {
-		fmt.Printf("[d] MinimumApplicationAddress=%x, MaximumApplicationAddress=%x\n", si.MinimumApplicationAddress, si.MaximumApplicationAddress)
-	}
-
-	for ea := uintptr(0); ea < si.MaximumApplicationAddress; {
-		mbi, err := virtualQueryEx(hProcess, ea)
-		if err != nil {
-			if Verbosity > 1 {
-				fmt.Printf("[!] virtualQueryEx failed: %s\n", err)
-			}
-			panic(err)
-		}
-		callback(mbi, hProcess)
-
-		ea += uintptr(mbi.RegionSize)
-	}
-
-	return nil
-}
-
-func ShowProcessRegions(pid uint32) {
-	fmt.Printf("[.] Memory regions of PID %d: (only MEM_COMMIT ones)\n", pid)
-	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION) {
+func (process *Process) ShowRegions() {
+	fmt.Printf("[.] Memory regions of PID %d: (only MEM_COMMIT ones)\n", process.Pid)
+	for _, region := range process.Regions() {
 		if !region.IsCommitted() && Verbosity < 1 {
 			continue
 		}
@@ -201,16 +154,23 @@ func ShowProcessRegions(pid uint32) {
 	}
 }
 
+func (process *Process) ShowAllRegions() {
+	fmt.Printf("[.] Memory regions of PID %d:\n", process.Pid)
+	for _, region := range process.Regions() {
+		region.Show()
+	}
+}
+
 // zero region_type or region_prot means ANY READABLE region
-func FindFirstEx(pid uint32, region_type uint32, region_prot uint32, pattern Pattern) []byte {
-	for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
+func (process *Process) FindFirstEx(region_type uint32, region_prot uint32, pattern Pattern) []byte {
+	for _, region := range process.Regions() {
 		if !region.IsReadable() {
 			continue
 		}
-		if region_type != 0 && region.Metadata.Type != region_type {
+		if region_type != 0 && region.MBI.Type != region_type {
 			continue
 		}
-		if region_prot != 0 && region.Metadata.Protect != region_prot {
+		if region_prot != 0 && region.MBI.Protect != region_prot {
 			continue
 		}
 
@@ -219,7 +179,7 @@ func FindFirstEx(pid uint32, region_type uint32, region_prot uint32, pattern Pat
 		if offset >= 0 {
 			if Verbosity > 0 {
 				region.Show()
-				ea := uintptr(offset) + region.Metadata.BaseAddress
+				ea := uintptr(offset) + region.MBI.BaseAddress
 				fmt.Printf("[=] Found:\n")
 				HexDump(data[offset:offset+pattern.Length()], ea)
 			}
@@ -235,14 +195,14 @@ func FindFirstEx(pid uint32, region_type uint32, region_prot uint32, pattern Pat
 }
 
 // generator
-func FindEach(pid uint32, pattern Pattern) chan *byte {
+func (process *Process) FindEach(pattern Pattern) chan *byte {
 	if Verbosity > 0 {
-		fmt.Printf("[.] Searching for %d bytes in PID %d ..\n", pattern.Length(), pid)
+		fmt.Printf("[.] Searching for %d bytes in PID %d ..\n", pattern.Length(), process.Pid)
 	}
 
 	ch := make(chan *byte)
 	go func() {
-		for region := range Regions(pid, windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ) {
+		for _, region := range process.Regions() {
 			if !region.IsReadable() {
 				continue
 			}
@@ -257,42 +217,6 @@ func FindEach(pid uint32, pattern Pattern) chan *byte {
 	}()
 
 	return ch
-}
-
-// prints hexdump, 16 bytes per line, with ascii chars on the right
-func HexDump(buffer []byte, ea uintptr) {
-	for i := 0; i < len(buffer); i += 16 {
-		fmt.Printf("%19X:", uintptr(i)+ea)
-		for j := 0; j < 16; j++ {
-			if j == 8 {
-				fmt.Printf(" ")
-			}
-			if i+j < len(buffer) {
-				fmt.Printf(" %02x", buffer[i+j])
-			} else {
-				fmt.Printf("   ")
-			}
-		}
-
-		fmt.Printf("     |")
-
-		for j := 0; j < 16; j++ {
-			if i+j < len(buffer) && buffer[i+j] >= 32 && buffer[i+j] <= 126 {
-				fmt.Printf("%c", buffer[i+j])
-			} else {
-				fmt.Printf(" ")
-			}
-		}
-
-		fmt.Println("|")
-	}
-}
-
-func ShowProcessMemory(pid uint32, ea uintptr, size int) {
-	data := ReadProcessMemory(pid, ea, size)
-	if data != nil {
-		HexDump(data, ea)
-	}
 }
 
 func ShowProcesses() {
