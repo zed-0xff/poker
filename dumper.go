@@ -341,9 +341,6 @@ func ParsePidOrExe(pid_or_exename string) uint32 {
 
 	if strings.HasSuffix(pid_or_exename, ".exe") {
 		pid = FindProcess(pid_or_exename)
-		if pid == 0 {
-			panic("Process not found: " + pid_or_exename)
-		}
 	} else {
 		val, err := strconv.ParseUint(pid_or_exename, 10, 32)
 		if err != nil {

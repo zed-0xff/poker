@@ -44,6 +44,14 @@ func (p Pattern) Find(buffer []byte) int {
 	return -1
 }
 
+func (p Pattern) Patch(buffer []byte, offset int) {
+    for i := 0; i < len(p.data); i++ {
+        if p.data[i] != -1 {
+            buffer[offset+i] = byte(p.data[i])
+        }
+    }
+}
+
 func (p *Pattern) FromHexString(s string) {
     p.data = []int{}
     for _, c := range strings.Fields(s) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+    "time"
 
     "golang.org/x/sys/windows"
 	"github.com/zed-0xff/dumper"
@@ -25,7 +26,12 @@ func usage() {
 		"    dumper <pid_or_exename> findstr \"string\"\n",
 		"    dumper <pid_or_exename> show <addr> [size]\n",
 		"    dumper <pid_or_exename> read <addr> <size>\n",
-		"    dumper <pid_or_exename> write_uint32 <addr> <value>\n",
+		"    dumper <pid_or_exename> patch   <addr> <old_bytes> <new_bytes>\n",
+		"    dumper <pid_or_exename> patch32 <addr> <old_value> <new_value>\n",
+		"    dumper <pid_or_exename> write32 <addr> <value>\n",
+        "\n",
+        "flags:\n",
+        "    --wait - wait for specified process, if it's not running\n",
 	)
 }
 
@@ -52,6 +58,8 @@ func parseHex(s string, title string) uint64 {
 }
 
 func run(args []string) []byte {
+    var pid uint32
+
 	if dumper.Verbosity > 0 {
 		fmt.Println("[d] run(", args, ")")
 	}
@@ -66,12 +74,36 @@ func run(args []string) []byte {
 		return nil
 	}
 
+    flag_wait := false
+    // if args contains "--wait" at any position then set flag_wait to true, and remove "--wait" from args
+    for i := 0; i < len(args); i++ {
+        if args[i] == "--wait" {
+            flag_wait = true
+            args = append(args[:i], args[i+1:]...)
+            break
+        }
+    }
+
 	arg := pop(&args)
-	pid := dumper.ParsePidOrExe(arg)
-	if pid == 0 {
-		fmt.Println("Process not found:", arg)
-		os.Exit(1)
-	}
+    wait_message_shown := false
+
+    for {
+        pid = dumper.ParsePidOrExe(arg)
+        if pid == 0 {
+            if flag_wait {
+                if !wait_message_shown {
+                    wait_message_shown = true
+                    fmt.Println("[.] Waiting for process:", arg)
+                }
+                time.Sleep(1 * time.Millisecond)
+                continue
+            } else {
+                fmt.Println("Process not found:", arg)
+                os.Exit(1)
+            }
+        }
+        break
+    }
 
     process := dumper.OpenProcess(pid, windows.PROCESS_QUERY_INFORMATION | windows.PROCESS_VM_READ);
     defer process.Close()
@@ -118,6 +150,7 @@ func run(args []string) []byte {
 		} else {
 			process.DumpRegion(uintptr(parseHex(args[0], "address")))
 		}
+
 	case "find":
 		if len(args) != 1 {
 			usage()
@@ -128,6 +161,7 @@ func run(args []string) []byte {
 		for match := range process.FindEach(pattern) {
 			fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
 		}
+
 	case "findstr":
 		if len(args) != 1 {
 			usage()
@@ -142,6 +176,7 @@ func run(args []string) []byte {
 		for match := range process.FindEach(pattern) {
 			fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
 		}
+
 	case "findfirstex":
 		if len(args) < 3 {
 			usage()
@@ -159,6 +194,7 @@ func run(args []string) []byte {
 			}
 		}
 		return nil
+
 	case "show":
 		if len(args) > 2 {
 			usage()
@@ -184,7 +220,72 @@ func run(args []string) []byte {
 			}
 		}
 		return result
-	case "write_uint32":
+
+    case "patch":
+		if len(args) != 3 {
+			usage()
+			os.Exit(1)
+		}
+		ea := uintptr(parseHex(args[0], "ea"))
+        var old_bytes dumper.Pattern
+        old_bytes.FromHexString(args[1])
+        if old_bytes.Length() == 0 {
+            panic("old_bytes.Length() == 0")
+        }
+
+        var new_bytes dumper.Pattern
+        new_bytes.FromHexString(args[2])
+        if new_bytes.Length() == 0 {
+            panic("new_bytes.Length() == 0")
+        }
+
+        maxLen := old_bytes.Length()
+        if new_bytes.Length() > maxLen {
+            maxLen = new_bytes.Length()
+        }
+
+        for {
+            bytes := process.ReadMemory(ea, uintptr(maxLen))
+            if old_bytes.Find(bytes) == 0 {
+                new_bytes.Patch(bytes, 0)
+                process.WriteMemory(ea, bytes)
+                break
+            } else if new_bytes.Find(bytes) == 0 {
+                // already patched
+                break
+            }
+            if flag_wait {
+                time.Sleep(1 * time.Millisecond)
+            } else {
+                break
+            }
+        }
+
+	case "patch32":
+		if len(args) != 3 {
+			usage()
+			os.Exit(1)
+		}
+		ea := uintptr(parseHex(args[0], "ea"))
+		old_value := uint32(parseHex(args[1], "old_value"))
+		new_value := uint32(parseHex(args[2], "new_value"))
+        for {
+            value := process.ReadUInt32(ea)
+            if value == old_value {
+                process.WriteUInt32(ea, new_value)
+                break
+            } else if value == new_value {
+                // already patched
+                break
+            }
+            if flag_wait {
+                time.Sleep(1 * time.Millisecond)
+            } else {
+                break
+            }
+        }
+
+	case "write32":
 		if len(args) != 2 {
 			usage()
 			os.Exit(1)
@@ -192,6 +293,7 @@ func run(args []string) []byte {
 		ea := uintptr(parseHex(args[0], "ea"))
 		value := uint32(parseHex(args[1], "value"))
 		process.WriteUInt32(ea, value)
+
 	default:
 		fmt.Println("[?] Invalid command:", arg)
 		usage()
