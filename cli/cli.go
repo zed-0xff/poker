@@ -19,8 +19,10 @@ func usage() {
 		"    dumper ps\n",
 		"    dumper <pid_or_exename> list\n",
 		"    dumper <pid_or_exename> dump <addr>\n",
-		"    dumper <pid_or_exename> dump all\n",
+		"    dumper <pid_or_exename> dump <addr1>..<addr2> [--sparse]\n",
+		"    dumper <pid_or_exename> dump all [--sparse]\n",
 		"    dumper <pid_or_exename> find <bytes>\n",
+		"    dumper <pid_or_exename> findstr \"string\"\n",
 		"    dumper <pid_or_exename> show <addr> [size]\n",
 		"    dumper <pid_or_exename> read <addr> <size>\n",
 		"    dumper <pid_or_exename> write_uint32 <addr> <value>\n",
@@ -37,6 +39,10 @@ func parseHex(s string, title string) uint64 {
 	if strings.HasPrefix(s, "0x") {
 		s = s[2:]
 	}
+
+    // remove '_' separators, if any
+    s = strings.ReplaceAll(s, "_", "")
+
 	x, err := strconv.ParseUint(s, 16, 64)
 	if err != nil {
 		fmt.Printf("[?] Invalid %s: %s\n", title, s)
@@ -89,8 +95,26 @@ func run(args []string) []byte {
 			usage()
 			os.Exit(1)
 		}
+        
+        // if args contains "--sparse" at any position then set sparse to true, and remove "--sparse" from args
+        sparse := false
+        for i := 0; i < len(args); i++ {
+            if args[i] == "--sparse" {
+                sparse = true
+                args = append(args[:i], args[i+1:]...)
+                break
+            }
+        }
+
 		if args[0] == "all" {
-			process.DumpAll()
+            process.DumpRange(uintptr(0), ^uintptr(0), sparse)
+
+        } else if strings.Contains(args[0], "..") {
+            addresses := strings.Split(args[0], "..")
+            start := uintptr(parseHex(addresses[0], "start"))
+            end := uintptr(parseHex(addresses[1], "end"))
+
+            process.DumpRange(start, end, sparse)
 		} else {
 			process.DumpRegion(uintptr(parseHex(args[0], "address")))
 		}
@@ -99,9 +123,24 @@ func run(args []string) []byte {
 			usage()
 			os.Exit(1)
 		}
-		pattern := dumper.ParsePattern(args[0])
+        var pattern dumper.Pattern
+        pattern.FromHexString(args[0])
 		for match := range process.FindEach(pattern) {
-			fmt.Printf("%x\n", match)
+			fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
+		}
+	case "findstr":
+		if len(args) != 1 {
+			usage()
+			os.Exit(1)
+		}
+		var pattern dumper.Pattern
+        pattern.FromAnsiString(args[0])
+		for match := range process.FindEach(pattern) {
+			fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
+		}
+        pattern.FromUnicodeString(args[0])
+		for match := range process.FindEach(pattern) {
+			fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
 		}
 	case "findfirstex":
 		if len(args) < 3 {
@@ -111,7 +150,8 @@ func run(args []string) []byte {
 
 		region_type := parseHex(args[0], "region_type")
 		region_prot := parseHex(args[1], "region_prot")
-		pattern := dumper.ParsePattern(strings.Join(args[2:], " "))
+        var pattern dumper.Pattern
+        pattern.FromHexString(strings.Join(args[2:], " "))
 		result := process.FindFirstEx(uint32(region_type), uint32(region_prot), pattern)
 		if !dumper.ScriptMode || g_debug {
 			if result != nil {

@@ -41,27 +41,31 @@ func (mbi MEMORY_BASIC_INFORMATION) IsReadable() bool {
 		return false
 	}
 
-	if mbi.Protect&windows.PAGE_GUARD != 0 {
+	if mbi.Protect & windows.PAGE_GUARD != 0 {
 		return false
 	}
 
-	if mbi.Protect&windows.PAGE_READONLY != 0 {
+	if mbi.Protect & windows.PAGE_READONLY != 0 {
 		return true
 	}
 
-	if mbi.Protect&windows.PAGE_READWRITE != 0 {
+	if mbi.Protect & windows.PAGE_READWRITE != 0 {
 		return true
 	}
 
-	if mbi.Protect&windows.PAGE_EXECUTE_READ != 0 {
+	if mbi.Protect & windows.PAGE_WRITECOPY != 0 {
 		return true
 	}
 
-	if mbi.Protect&windows.PAGE_EXECUTE_READWRITE != 0 {
+	if mbi.Protect & windows.PAGE_EXECUTE_READ != 0 {
 		return true
 	}
 
-	if mbi.Protect&windows.PAGE_EXECUTE_WRITECOPY != 0 {
+	if mbi.Protect & windows.PAGE_EXECUTE_READWRITE != 0 {
+		return true
+	}
+
+	if mbi.Protect & windows.PAGE_EXECUTE_WRITECOPY != 0 {
 		return true
 	}
 

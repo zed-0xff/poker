@@ -1,7 +1,25 @@
 task default: %w[build]
 
+def build! bitness
+  arch =
+    case bitness
+    when 32 then '386'
+    when 64 then 'amd64'
+    else raise "Invalid bitness: #{bitness}"
+    end
+
+  cmd = "GOOS=windows GOARCH=#{arch} go build -o dumper#{bitness}.exe"
+
+  goroot = File.expand_path("../go1.20")
+  if File.exist?("#{goroot}/bin/go")
+    # win7 compat
+    cmd = "GOROOT=#{goroot} #{cmd}".sub(' go ', " #{goroot}/bin/go ")
+  end
+  sh cmd
+end
+
 desc 'Build'
 task :build do
-  sh 'GOOS=windows GOARCH=386   go build -o dumper32.exe'
-  sh 'GOOS=windows GOARCH=amd64 go build -o dumper64.exe'
+  build! 32
+  build! 64
 end

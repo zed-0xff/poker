@@ -44,21 +44,38 @@ func (p Pattern) Find(buffer []byte) int {
 	return -1
 }
 
+func (p *Pattern) FromHexString(s string) {
+    p.data = []int{}
+    for _, c := range strings.Fields(s) {
+        if c == "?" || c == "??" {
+            p.data = append(p.data, -1)
+        } else {
+            x, err := strconv.ParseUint(string(c), 16, 8)
+            if err != nil {
+                panic(err)
+            }
+            p.data = append(p.data, int(x))
+        }
+    }
+}
+
+func (p *Pattern) FromAnsiString(s string) {
+    p.data = []int{}
+    for _, c := range s {
+        p.data = append(p.data, int(c))
+    }
+}
+
+func (p *Pattern) FromUnicodeString(s string) {
+    p.data = []int{}
+    for _, c := range s {
+        p.data = append(p.data, int(c))
+        p.data = append(p.data, 0)
+    }
+}
+
 func ParsePattern(src string) Pattern {
 	p := Pattern{}
-
-	for _, c := range strings.Fields(src) {
-		// convert each arg from hex to byte
-		if c == "?" || c == "??" {
-			p.data = append(p.data, -1)
-		} else {
-			x, err := strconv.ParseUint(string(c), 16, 8)
-			if err != nil {
-				panic(err)
-			}
-			p.data = append(p.data, int(x))
-		}
-	}
-
+    p.FromHexString(src)
 	return p
 }

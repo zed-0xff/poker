@@ -43,7 +43,7 @@ func (r *Region) Show() {
 	}
 
 	fmt.Printf(
-		"    ba:%12X size:%12X state:%8X type:%8X prot: %4X %s %s\n",
+		"    ba:%12x size:%12x state:%8x type:%8x prot: %4x %s %s\n",
 		r.MBI.BaseAddress, r.MBI.RegionSize, r.MBI.State, r.MBI.Type, r.MBI.Protect, prot2str(r.MBI.Protect), moduleName,
 	)
 }

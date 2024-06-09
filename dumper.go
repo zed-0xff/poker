@@ -17,6 +17,39 @@ var ScriptMode = false
 var Verbosity = 0
 var g_buffer = []byte{}
 
+func PtrFmtSize() int {
+    if unsafe.Sizeof(uintptr(0)) == 8 {
+        return 12
+    } else {
+        return 8
+    }
+}
+
+func prot2ext(prot uint32) string {
+	if prot&windows.PAGE_READONLY != 0 {
+		return "r"
+	}
+	if prot&windows.PAGE_READWRITE != 0 {
+		return "rw"
+	}
+	if prot&windows.PAGE_WRITECOPY != 0 {
+		return "rw"
+	}
+	if prot&windows.PAGE_EXECUTE != 0 {
+		return "x"
+	}
+	if prot&windows.PAGE_EXECUTE_READ != 0 {
+		return "rx"
+	}
+	if prot&windows.PAGE_EXECUTE_READWRITE != 0 {
+		return "rwx"
+	}
+	if prot&windows.PAGE_EXECUTE_WRITECOPY != 0 { // is it rwx ?
+		return "rwx"
+	}
+    return "bin"
+}
+
 func prot2str(prot uint32) string {
 	var s string
 
@@ -27,7 +60,7 @@ func prot2str(prot uint32) string {
 		s += "[rw-]"
 	}
 	if prot&windows.PAGE_WRITECOPY != 0 {
-		s += "[-w-][writecopy]"
+		s += "[rw-][writecopy]"
 	}
 	if prot&windows.PAGE_EXECUTE != 0 {
 		s += "[--x]"
@@ -106,35 +139,59 @@ func WriteFile(fname string, data []byte) error {
 	return WriteFileEx(fname, data, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0)
 }
 
-func (process *Process) DumpAll() {
-	fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", process.Pid)
+func (process *Process) DumpRange(start uintptr, end uintptr, sparse bool) {
+    if( start == 0 && end == ^uintptr(0) ) {
+        fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", process.Pid)
+    } else {
+        fmt.Printf("[.] Dumping range %x-%x of PID %d ..\n", start, end, process.Pid)
+    }
 
-	fname := fmt.Sprintf("pid_%d_sparse.bin", process.Pid)
+    fname := ""
+    if sparse {
+        fname = fmt.Sprintf("pid_%d_sparse.bin", process.Pid)
+        CreateSparseFile(fname)
+    }
+
 	totalWritten := 0
 
-	CreateSparseFile(fname)
 	for _, region := range process.Regions() {
 		if !region.IsReadable() {
 			continue
 		}
+        if start != 0 && (region.MBI.BaseAddress + uintptr(region.MBI.RegionSize)) < start {
+            continue
+        }
+        if end != ^uintptr(0) && region.MBI.BaseAddress >= end {
+            continue
+        }
+
 		region.Show()
-		WriteFileEx(fname, region.ReadAll(), os.O_WRONLY|os.O_CREATE, int(region.MBI.BaseAddress))
+
+        if sparse {
+            WriteFileEx(fname, region.ReadAll(), os.O_WRONLY|os.O_CREATE, int(region.MBI.BaseAddress))
+        } else {
+            fname := fmt.Sprintf("%0*x.%s", PtrFmtSize(), region.MBI.BaseAddress, prot2ext(region.MBI.Protect))
+            err := WriteFile(fname, region.ReadAll())
+            if err != nil {
+                panic(err)
+            }
+        }
 		totalWritten += int(region.MBI.RegionSize)
 	}
 	fmt.Printf("[=] %s (%d bytes)\n", fname, totalWritten)
 }
 
 func (process *Process) DumpRegion(target_ea uintptr) {
-	fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, process.Pid)
+    fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, process.Pid)
 
 	for _, region := range process.Regions() {
-		if target_ea < region.MBI.BaseAddress || target_ea >= region.MBI.BaseAddress+uintptr(region.MBI.RegionSize) {
-			continue
-		}
+        if target_ea < region.MBI.BaseAddress || target_ea >= region.MBI.BaseAddress+uintptr(region.MBI.RegionSize) {
+            continue
+        }
 
 		region.Show()
 
-		fname := fmt.Sprintf("%08X.bin", region.MBI.BaseAddress)
+		fname := fmt.Sprintf("%0*x.bin", PtrFmtSize(), region.MBI.BaseAddress)
 		err := WriteFile(fname, region.ReadAll())
 		if err != nil {
 			panic(err)
@@ -195,12 +252,12 @@ func (process *Process) FindFirstEx(region_type uint32, region_prot uint32, patt
 }
 
 // generator
-func (process *Process) FindEach(pattern Pattern) chan *byte {
+func (process *Process) FindEach(pattern Pattern) chan uintptr {
 	if Verbosity > 0 {
 		fmt.Printf("[.] Searching for %d bytes in PID %d ..\n", pattern.Length(), process.Pid)
 	}
 
-	ch := make(chan *byte)
+	ch := make(chan uintptr)
 	go func() {
 		for _, region := range process.Regions() {
 			if !region.IsReadable() {
@@ -208,10 +265,19 @@ func (process *Process) FindEach(pattern Pattern) chan *byte {
 			}
 
 			data := region.ReadAll()
-			offset := pattern.Find(data)
-			if offset >= 0 {
-				ch <- &data[offset]
-			}
+            index := 0
+            for {
+                // Find method now needs to handle repeated searches, starting from the index
+                offset := pattern.Find(data[index:])
+                if offset < 0 {
+                    break
+                }
+                // Calculate the real match address based on the base address and offset
+                matchAddress := region.MBI.BaseAddress + uintptr(index + offset)
+                ch <- matchAddress
+                // Move index past the current match for subsequent searches
+                index += offset + 1
+            }
 		}
 		close(ch)
 	}()
