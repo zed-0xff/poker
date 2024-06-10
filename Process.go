@@ -10,10 +10,13 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const PROCESS_ALL_ACCESS = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0xFFF
+
 type Process struct {
 	Handle windows.Handle
 	Pid    uint32
 	Access uint32
+    suspended bool
 }
 
 func OpenProcess(pid, access uint32) *Process {
@@ -26,6 +29,41 @@ func OpenProcess(pid, access uint32) *Process {
 		Pid:    pid,
 		Access: access,
 	}
+}
+
+func StartProcess(exe string) *Process {
+    commandLine, _ := windows.UTF16PtrFromString(exe)
+    var startupInfo windows.StartupInfo
+    var processInfo windows.ProcessInformation
+    startupInfo.Cb = uint32(unsafe.Sizeof(startupInfo))
+    creationFlags := uint32(windows.CREATE_SUSPENDED)
+
+    err := windows.CreateProcess(
+        nil,                       // Application name
+        commandLine,               // Command line
+        nil,                       // Process security attributes
+        nil,                       // Primary thread security attributes
+        false,                     // Handles are not inherited
+        creationFlags,             // Creation flags
+        nil,                       // Use parent's environment
+        nil,                       // Use parent's current directory
+        &startupInfo,              // Pointer to STARTUPINFO
+        &processInfo,              // Pointer to PROCESS_INFORMATION
+    )
+    if err != nil {
+        panic(err)
+    }
+
+    return &Process{
+        Handle: processInfo.Process,
+        Pid:    processInfo.ProcessId,
+        Access: PROCESS_ALL_ACCESS,
+        suspended: true,
+    }
+}
+
+func (p *Process) IsSuspended() bool {
+    return p.suspended
 }
 
 // reopen if the process is not already opened with the given access rights
@@ -136,6 +174,8 @@ func (p *Process) Resume() {
 			panic(fmt.Errorf("Thread32Next: %w", err))
 		}
 	}
+
+    p.suspended = false
 }
 
 // closes the process handle, but does not terminate the process
@@ -277,3 +317,4 @@ func (p *Process) Modules() []Module {
 
 	return modules
 }
+

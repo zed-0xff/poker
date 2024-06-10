@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const Version = "0.3.0"
+const Version = "0.4.0 alpha"
 
 var ScriptMode = false
 var Verbosity = 0

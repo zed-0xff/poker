@@ -53,12 +53,21 @@ func (p Pattern) Patch(buffer []byte, offset int) {
 }
 
 func (p *Pattern) FromHexString(s string) {
+    s = strings.ReplaceAll(s, " ", "")
+    if len(s)%2 != 0 {
+        panic("Pattern::FromHexString: odd length")
+    }
+    if len(s) == 0 {
+        panic("Pattern::FromHexString: empty string")
+    }
+
     p.data = []int{}
-    for _, c := range strings.Fields(s) {
-        if c == "?" || c == "??" {
+    for i := 0; i < len(s); i += 2 {
+        b := s[i:i+2]
+        if b == "??" {
             p.data = append(p.data, -1)
         } else {
-            x, err := strconv.ParseUint(string(c), 16, 8)
+            x, err := strconv.ParseUint(b, 16, 8)
             if err != nil {
                 panic(err)
             }
