@@ -52,6 +52,27 @@ func (p Pattern) Patch(buffer []byte, offset int) {
     }
 }
 
+func (p *Pattern) FromArgs(args []string) {
+    s := ""
+    for i, arg := range args {
+        switch len(arg) {
+        case 1:
+            if arg == "?" {
+                s += "??"
+            } else {
+                s += "0" + arg
+            } 
+
+        case 2:
+            s += arg
+
+        default:
+            panic(fmt.Sprintf("Pattern::FromArgs: invalid argument %d: \"%s\"", i, arg))
+        }
+    }
+    p.FromHexString(s)
+}
+
 func (p *Pattern) FromHexString(s string) {
     s = strings.ReplaceAll(s, " ", "")
     if len(s)%2 != 0 {

@@ -22,11 +22,18 @@ func HexDump(buffer []byte, ea uintptr) {
 		fmt.Printf("     |")
 
 		for j := 0; j < 16; j++ {
-			if i+j < len(buffer) && buffer[i+j] >= 32 && buffer[i+j] <= 126 {
-				fmt.Printf("%c", buffer[i+j])
+            var c byte = 0
+            if i+j < len(buffer) {
+                c = buffer[i+j]
+            }
+
+            if c >= 32 && c <= 126 {
+				fmt.Printf("%c", c)
+            } else if c == 0 {
+                fmt.Printf(" ")
 			} else {
-				fmt.Printf(" ")
-			}
+                fmt.Printf(".")
+            }
 		}
 
 		fmt.Println("|")

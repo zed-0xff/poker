@@ -1,6 +1,6 @@
 task default: %w[build]
 
-def build! bitness
+def build! bitness, suffix
   arch =
     case bitness
     when 32 then '386'
@@ -8,7 +8,7 @@ def build! bitness
     else raise "Invalid bitness: #{bitness}"
     end
 
-  cmd = "GOOS=windows GOARCH=#{arch} go build -o dumper#{bitness}.exe"
+  cmd = "GOOS=windows GOARCH=#{arch} go build -o poker#{suffix}.exe"
 
   goroot = File.expand_path("../go1.20")
   if File.exist?("#{goroot}/bin/go")
@@ -20,6 +20,6 @@ end
 
 desc 'Build'
 task :build do
-  build! 32
-  build! 64
+  build! 32, "32"
+  build! 64, ""
 end

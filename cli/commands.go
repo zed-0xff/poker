@@ -23,20 +23,27 @@ var g_wait       = false
 var g_pid uint32 = 0
 var g_process  *dumper.Process
 
+// extras:
+//   - '_' can be used as a visual separator
+//   - '+' can be used for basic arithmetics
 func parseHex(s string, title string) uint64 {
 	if strings.HasPrefix(s, "0x") {
 		s = s[2:]
 	}
 
-    // remove '_' separators, if any
     s = strings.ReplaceAll(s, "_", "")
+    var result uint64
 
-	x, err := strconv.ParseUint(s, 16, 64)
-	if err != nil {
-		fmt.Printf("[?] Invalid %s: %s\n", title, s)
-		os.Exit(1)
-	}
-	return x
+    for _, part := range strings.Split(s, "+") {
+        val, err := strconv.ParseUint(part, 16, 64)
+        if err != nil {
+            fmt.Printf("[?] Invalid %s: %s\n", title, s)
+            os.Exit(1)
+        }
+        result += val
+    }
+
+	return result 
 }
 
 func registerCommand(name string, minArgs int, maxArgs int, function func(args []string)) {
@@ -103,7 +110,8 @@ func regions(args []string) {
 func dump(args []string) {
     process := openProcess()
 
-    if args[0] == "all" {
+    if len(args) == 0 || args[0] == "all" {
+        // dump all
         process.DumpRange(uintptr(0), ^uintptr(0), g_sparse)
 
     } else if strings.Contains(args[0], "..") {
@@ -239,6 +247,19 @@ func patch32(args []string) {
     }
 }
 
+// args[0]   - ea
+// args[1..] - bytes to write
+func poke(args []string) {
+    ea := uintptr(parseHex(args[0], "ea"))
+    var new_bytes dumper.Pattern
+    new_bytes.FromArgs(args[1:])
+
+    process := openProcess()
+    bytes := process.ReadMemory(ea, uintptr(new_bytes.Length()))
+    new_bytes.Patch(bytes, 0)
+    process.WriteMemory(ea, bytes)
+}
+
 func poke32(args []string) {
     ea := uintptr(parseHex(args[0], "ea"))
     value := uint32(parseHex(args[1], "value"))
@@ -280,13 +301,14 @@ func registerCommands() {
     registerFlag("exe",         1, 1, exe2pid)
 
     registerCommand("comment",    -1,-1, func(args []string) {})
-    registerCommand("dump",        1, 1, dump)
+    registerCommand("dump",        0, 1, dump)
     registerCommand("find",        1, 1, find)
     registerCommand("findfirstex", 3, 3, findFirstEx)
     registerCommand("findstr",     1, 1, findstr)
     registerCommand("patch",       3, 3, patch)
     registerCommand("patch32",     3, 3, patch32)
     registerCommand("peek",        1, 2, peek)
+    registerCommand("poke",        2,-1, poke)
     registerCommand("poke32",      2, 2, poke32)
     registerCommand("ps",          0, 0, ps)
     registerCommand("read",        2, 2, read)
