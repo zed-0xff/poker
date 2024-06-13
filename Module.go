@@ -1,4 +1,4 @@
-package dumper
+package poker
 
 type Module struct {
 	BaseOfDll   uintptr // Base address of the module

@@ -6,14 +6,14 @@ import (
     "sort"
 	"strings"
 
-	"github.com/zed-0xff/dumper"
+	"github.com/zed-0xff/poker"
 )
 
 var g_debug bool = false
 
 func usage() {
 	fmt.Print(
-		"Universal memory patcher/dumper v", dumper.Version, " by zed_0xff\n",
+		"Universal memory patcher/poker v", poker.Version, " by zed_0xff\n",
 		"commands:\n",
     )
 
@@ -46,7 +46,7 @@ func usage() {
 }
 
 func runArgs(args [][]string) {
-	if dumper.Verbosity > 0 {
+	if poker.Verbosity > 0 {
 		fmt.Println("[d] runArgs(", args, ")")
 	}
 
@@ -100,19 +100,19 @@ func main() {
 		}
 		if arg == "--debug" {
 			g_debug = true
-			dumper.Verbosity++
+			poker.Verbosity++
 			continue
 		}
 		if arg == "--noscript" || arg == "--no-script" {
-			dumper.ScriptMode = false
+			poker.ScriptMode = false
 			continue
 		}
 		if arg == "-q" {
-			dumper.Verbosity--
+			poker.Verbosity--
 			continue
 		}
 		if arg == "-v" || arg == "--verbose" {
-			dumper.Verbosity++
+			poker.Verbosity++
 			continue
 		}
 		args = append(args, arg)

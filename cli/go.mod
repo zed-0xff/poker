@@ -1,7 +1,7 @@
-module dumper
+module poker
 
-require github.com/zed-0xff/dumper v0.1.0
+require github.com/zed-0xff/poker v0.1.0
 
 require golang.org/x/sys v0.16.0 // indirect
 
-replace github.com/zed-0xff/dumper v0.1.0 => ../
+replace github.com/zed-0xff/poker v0.1.0 => ../

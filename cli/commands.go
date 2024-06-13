@@ -8,7 +8,7 @@ import (
     "strings"
 
     "golang.org/x/sys/windows"
-	"github.com/zed-0xff/dumper"
+	"github.com/zed-0xff/poker"
 )
 
 type Command struct {
@@ -21,7 +21,7 @@ var g_commands   = make(map[string]Command)
 var g_sparse     = false
 var g_wait       = false
 var g_pid uint32 = 0
-var g_process  *dumper.Process
+var g_process  *poker.Process
 
 // extras:
 //   - '_' can be used as a visual separator
@@ -60,7 +60,7 @@ func registerFlag(name string, minArgs int, maxArgs int, function func(args []st
 }
 
 func ps(args []string) {
-    dumper.ShowProcesses()
+    poker.ShowProcesses()
 }
 
 func savePid(args []string) {
@@ -77,7 +77,7 @@ func exe2pid(args []string) {
     wait_message_shown := false
 
     for {
-        pid := dumper.FindProcess(exe)
+        pid := poker.FindProcess(exe)
         if pid == 0 {
             if g_wait {
                 if !wait_message_shown {
@@ -96,9 +96,9 @@ func exe2pid(args []string) {
     }
 }
 
-func openProcess() *dumper.Process {
+func openProcess() *poker.Process {
     if g_process == nil {
-        g_process = dumper.OpenProcess(g_pid, windows.PROCESS_QUERY_INFORMATION | windows.PROCESS_VM_READ)
+        g_process = poker.OpenProcess(g_pid, windows.PROCESS_QUERY_INFORMATION | windows.PROCESS_VM_READ)
     }
     return g_process
 }
@@ -126,36 +126,36 @@ func dump(args []string) {
 }
 
 func find(args []string) {
-    var pattern dumper.Pattern
+    var pattern poker.Pattern
     pattern.FromHexString(args[0])
     for match := range openProcess().FindEach(pattern) {
-        fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
+        fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
     }
 }
 
 func findstr(args []string) {
     process := openProcess()
 
-    var pattern dumper.Pattern
+    var pattern poker.Pattern
     pattern.FromAnsiString(args[0])
     for match := range process.FindEach(pattern) {
-        fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
+        fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
     }
     pattern.FromUnicodeString(args[0])
     for match := range process.FindEach(pattern) {
-        fmt.Printf("%0*x\n", dumper.PtrFmtSize(), match)
+        fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
     }
 }
 
 func findFirstEx(args []string) {
     region_type := parseHex(args[0], "region_type")
     region_prot := parseHex(args[1], "region_prot")
-    var pattern dumper.Pattern
+    var pattern poker.Pattern
     pattern.FromHexString(strings.Join(args[2:], " "))
     result := openProcess().FindFirstEx(uint32(region_type), uint32(region_prot), pattern)
-    if !dumper.ScriptMode || g_debug {
+    if !poker.ScriptMode || g_debug {
         if result != nil {
-            dumper.HexDump(result, 0)
+            poker.HexDump(result, 0)
         }
     }
 }
@@ -166,12 +166,12 @@ func peek(args []string) {
         size = uintptr(parseHex(args[1], "size"))
     }
     ea := uintptr(parseHex(args[0], "address"))
-    dumper.HexDump(openProcess().ReadMemory(ea, size), ea)
+    poker.HexDump(openProcess().ReadMemory(ea, size), ea)
 }
 
 func read(args []string) {
     result := openProcess().ReadMemory(uintptr(parseHex(args[0], "ea")), uintptr(parseHex(args[1], "size")))
-    if !dumper.ScriptMode {
+    if !poker.ScriptMode {
         if result != nil {
             os.Stdout.Write(result)
         }
@@ -180,13 +180,13 @@ func read(args []string) {
 
 func patch(args []string) {
     ea := uintptr(parseHex(args[0], "ea"))
-    var old_bytes dumper.Pattern
+    var old_bytes poker.Pattern
     old_bytes.FromHexString(args[1])
     if old_bytes.Length() == 0 {
         panic("old_bytes.Length() == 0")
     }
 
-    var new_bytes dumper.Pattern
+    var new_bytes poker.Pattern
     new_bytes.FromHexString(args[2])
     if new_bytes.Length() == 0 {
         panic("new_bytes.Length() == 0")
@@ -251,7 +251,7 @@ func patch32(args []string) {
 // args[1..] - bytes to write
 func poke(args []string) {
     ea := uintptr(parseHex(args[0], "ea"))
-    var new_bytes dumper.Pattern
+    var new_bytes poker.Pattern
     new_bytes.FromArgs(args[1:])
 
     process := openProcess()
@@ -267,7 +267,7 @@ func poke32(args []string) {
 }
 
 func run(args []string) {
-    g_process = dumper.StartProcess(args[0])
+    g_process = poker.StartProcess(args[0])
 }
 
 func resume(args []string) {

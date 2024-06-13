@@ -1,4 +1,4 @@
-package dumper
+package poker
 
 import (
 	"golang.org/x/sys/windows"
