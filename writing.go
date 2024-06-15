@@ -34,6 +34,12 @@ func (p *Process) WriteMemory(addr uintptr, data []byte) {
 	}
 }
 
+func (p *Process) WriteByte(ea uintptr, value byte) {
+	buffer := make([]byte, 1)
+	buffer[0] = value
+	p.WriteMemory(ea, buffer)
+}
+
 func (p *Process) WriteUInt32(ea uintptr, value uint32) {
 	buffer := make([]byte, 4)
 	buffer[0] = byte(value)

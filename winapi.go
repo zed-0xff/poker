@@ -23,6 +23,7 @@ var (
 	procProcess32Next            = kernel32.NewProc("Process32NextW")
 	procVirtualQueryEx           = kernel32.NewProc("VirtualQueryEx")
 	procVirtualAllocEx           = kernel32.NewProc("VirtualAllocEx")
+    procSuspendThread            = kernel32.NewProc("SuspendThread")
 	getSystemInfo                = kernel32.NewProc("GetSystemInfo")
 )
 
@@ -163,4 +164,12 @@ func VirtualAllocEx(hProcess windows.Handle, addr uintptr, size, allocType, prot
 		return 0, err
 	}
 	return ret, nil
+}
+
+func SuspendThread(hThread windows.Handle) (uint32, error) {
+    ret, _, err := procSuspendThread.Call(uintptr(hThread))
+    if ret == 0xFFFFFFFF {
+        return 0, err
+    }
+    return uint32(ret), nil
 }

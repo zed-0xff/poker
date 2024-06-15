@@ -140,6 +140,43 @@ func CreateProcess(path string, args []string, opts ...CreateProcessOption) Proc
 	}
 }
 
+func (p *Process) Suspend() {
+    snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+    if err != nil {
+        panic(fmt.Errorf("CreateToolhelp32Snapshot: %w", err))
+    }
+    defer windows.CloseHandle(snapshot)
+
+    var te windows.ThreadEntry32
+    te.Size = uint32(unsafe.Sizeof(te))
+    if err = windows.Thread32First(snapshot, &te); err != nil {
+        panic(fmt.Errorf("Thread32First: %w", err))
+    }
+
+    for {
+        if te.OwnerProcessID == p.Pid {
+            th, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, te.ThreadID)
+            if err != nil {
+                panic(fmt.Errorf("OpenThread: %w", err))
+            }
+            _, err = SuspendThread(th)
+            if err != nil {
+                panic(fmt.Errorf("SuspendThread: %w", err))
+            }
+            windows.CloseHandle(th)
+        }
+
+        if err = windows.Thread32Next(snapshot, &te); err != nil {
+            if err == windows.ERROR_NO_MORE_FILES {
+                break
+            }
+            panic(fmt.Errorf("Thread32Next: %w", err))
+        }
+    }
+
+    p.suspended = true
+}
+
 // resumes a suspended process by resuming all of its threads.
 func (p *Process) Resume() {
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
