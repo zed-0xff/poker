@@ -7,10 +7,10 @@ import (
 )
 
 func (p *Process) WriteMemory(addr uintptr, data []byte) {
-	lp := p.MaybeReopen(windows.PROCESS_VM_WRITE|windows.PROCESS_VM_OPERATION)
-    if lp != p {
-        defer lp.Close()
-    }
+	lp := p.MaybeReopen(windows.PROCESS_VM_WRITE | windows.PROCESS_VM_OPERATION)
+	if lp != p {
+		defer lp.Close()
+	}
 
 	mbi := lp.VirtualQueryEx(addr)
 

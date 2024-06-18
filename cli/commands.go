@@ -1,11 +1,14 @@
 package main
 
 import (
+    "bytes"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+    "crypto/md5"
 
 	"github.com/zed-0xff/poker"
 	"golang.org/x/sys/windows"
@@ -23,6 +26,10 @@ var g_wait = false
 var g_needResume = false
 var g_pid uint32 = 0
 var g_process *poker.Process = nil
+
+var g_rangeStart uintptr = 0
+var g_rangeEnd uintptr = 0
+var g_uniq bool = false
 
 // extras:
 //   - '_' can be used as a visual separator
@@ -111,6 +118,12 @@ func regions(args []string) {
 func dump(args []string) {
 	process := openProcess()
 
+    dumpDir := fmt.Sprintf("dump_%d", process.Pid)
+    if _, err := os.Stat(dumpDir); os.IsNotExist(err) {
+        os.Mkdir(dumpDir, 0755)
+    }
+    os.Chdir(dumpDir)
+
 	if len(args) == 0 || args[0] == "all" {
 		// dump all
 		process.DumpRange(uintptr(0), ^uintptr(0), g_sparse)
@@ -124,6 +137,78 @@ func dump(args []string) {
 	} else {
 		process.DumpRegion(uintptr(parseHex(args[0], "address")))
 	}
+
+    os.Chdir("..")
+}
+
+// 1st arg - number of dumps,     default: infinite
+// 2nd arg - delay between dumps, default: 1ms
+func diffdump(args []string) {
+    maxDumps := -1
+    delay := 1
+
+    if len(args) > 0 {
+        maxDumps, _ = strconv.Atoi(args[0])
+        if len(args) > 1 {
+            delay, _ = strconv.Atoi(args[1])
+        }
+    }
+
+    uniqHashes := make(map[[16]byte]bool)
+    hashes := make(map[uintptr][]byte)
+    var hash []byte
+
+    nDumps := 0
+    process := openProcess()
+    for {
+        dumpDir := fmt.Sprintf("dump_%d_%08x", process.Pid, nDumps)
+
+        nBytesDumped := process.DumpIf(dumpDir, func(region *poker.Region, data []byte) bool {
+            if g_rangeStart == 0 {
+                hash = md5.New().Sum(data)
+            } else {
+                if region.MBI.BaseAddress > g_rangeStart || region.MBI.BaseAddress + region.MBI.RegionSize < g_rangeEnd {
+                    return false
+                }
+                if region.MBI.BaseAddress <= g_rangeStart && region.MBI.BaseAddress + region.MBI.RegionSize >= g_rangeEnd {
+                    // single-region mode, calculcte only region hash
+                    hash = md5.New().Sum(data[g_rangeStart - region.MBI.BaseAddress:g_rangeEnd - region.MBI.BaseAddress])
+                } else {
+                    // range spans multiple regions, calculate full region hash
+                    hash = md5.New().Sum(data)
+                }
+            }
+
+            if g_uniq {
+                hashArr := [16]byte{}
+                copy(hashArr[:], hash)
+
+                if _, ok := uniqHashes[hashArr]; ok {
+                    return false
+                }
+                uniqHashes[hashArr] = true
+            }
+
+            prevHash, ok := hashes[region.MBI.BaseAddress]
+            if !ok || !bytes.Equal(prevHash, hash) {
+                hashes[region.MBI.BaseAddress] = hash
+                return true
+            }
+
+            return false
+        })
+
+        if nBytesDumped > 0 {
+            nDumps++
+            if maxDumps > 0 && nDumps >= maxDumps {
+                break
+            }
+        }
+
+        if delay > 0 {
+            time.Sleep(time.Duration(delay) * time.Millisecond)
+        }
+    }
 }
 
 func find(args []string) {
@@ -309,13 +394,26 @@ func validate(args [][]string) {
 	}
 }
 
+func setRange(args []string) {
+    if len(args) == 1 {
+        g_rangeStart = uintptr(parseHex(args[0], "start"))
+        g_rangeEnd = g_rangeStart
+    } else {
+        g_rangeStart = uintptr(parseHex(args[0], "start"))
+        g_rangeEnd = uintptr(parseHex(args[1], "end"))
+    }
+}
+
 func registerCommands() {
 	registerFlag("wait", 0, 0, func(args []string) { g_wait = true })
 	registerFlag("sparse", 0, 0, func(args []string) { g_sparse = true })
 	registerFlag("pid", 1, 1, savePid)
-	registerFlag("exe", 1, 1, exe2pid)
+    registerFlag("exe", 1, 1, exe2pid)
+	registerFlag("range", 1, 2, setRange)
+    registerFlag("uniq", 0, 0, func(args []string) { g_uniq = true })
 
 	registerCommand("comment", -1, -1, func(args []string) {})
+	registerCommand("diffdump", 0, 2, diffdump)
 	registerCommand("dump", 0, 1, dump)
 	registerCommand("find", 1, 1, find)
 	registerCommand("findfirstex", 3, 3, findFirstEx)

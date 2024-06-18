@@ -23,7 +23,7 @@ var (
 	procProcess32Next            = kernel32.NewProc("Process32NextW")
 	procVirtualQueryEx           = kernel32.NewProc("VirtualQueryEx")
 	procVirtualAllocEx           = kernel32.NewProc("VirtualAllocEx")
-    procSuspendThread            = kernel32.NewProc("SuspendThread")
+	procSuspendThread            = kernel32.NewProc("SuspendThread")
 	getSystemInfo                = kernel32.NewProc("GetSystemInfo")
 )
 
@@ -42,31 +42,31 @@ func (mbi MEMORY_BASIC_INFORMATION) IsReadable() bool {
 		return false
 	}
 
-	if mbi.Protect & windows.PAGE_GUARD != 0 {
+	if mbi.Protect&windows.PAGE_GUARD != 0 {
 		return false
 	}
 
-	if mbi.Protect & windows.PAGE_READONLY != 0 {
+	if mbi.Protect&windows.PAGE_READONLY != 0 {
 		return true
 	}
 
-	if mbi.Protect & windows.PAGE_READWRITE != 0 {
+	if mbi.Protect&windows.PAGE_READWRITE != 0 {
 		return true
 	}
 
-	if mbi.Protect & windows.PAGE_WRITECOPY != 0 {
+	if mbi.Protect&windows.PAGE_WRITECOPY != 0 {
 		return true
 	}
 
-	if mbi.Protect & windows.PAGE_EXECUTE_READ != 0 {
+	if mbi.Protect&windows.PAGE_EXECUTE_READ != 0 {
 		return true
 	}
 
-	if mbi.Protect & windows.PAGE_EXECUTE_READWRITE != 0 {
+	if mbi.Protect&windows.PAGE_EXECUTE_READWRITE != 0 {
 		return true
 	}
 
-	if mbi.Protect & windows.PAGE_EXECUTE_WRITECOPY != 0 {
+	if mbi.Protect&windows.PAGE_EXECUTE_WRITECOPY != 0 {
 		return true
 	}
 
@@ -167,9 +167,9 @@ func VirtualAllocEx(hProcess windows.Handle, addr uintptr, size, allocType, prot
 }
 
 func SuspendThread(hThread windows.Handle) (uint32, error) {
-    ret, _, err := procSuspendThread.Call(uintptr(hThread))
-    if ret == 0xFFFFFFFF {
-        return 0, err
-    }
-    return uint32(ret), nil
+	ret, _, err := procSuspendThread.Call(uintptr(hThread))
+	if ret == 0xFFFFFFFF {
+		return 0, err
+	}
+	return uint32(ret), nil
 }

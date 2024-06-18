@@ -13,10 +13,10 @@ import (
 const PROCESS_ALL_ACCESS = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0xFFF
 
 type Process struct {
-	Handle windows.Handle
-	Pid    uint32
-	Access uint32
-    suspended bool
+	Handle    windows.Handle
+	Pid       uint32
+	Access    uint32
+	suspended bool
 }
 
 func OpenProcess(pid, access uint32) *Process {
@@ -32,38 +32,38 @@ func OpenProcess(pid, access uint32) *Process {
 }
 
 func StartProcess(exe string) *Process {
-    commandLine, _ := windows.UTF16PtrFromString(exe)
-    var startupInfo windows.StartupInfo
-    var processInfo windows.ProcessInformation
-    startupInfo.Cb = uint32(unsafe.Sizeof(startupInfo))
-    creationFlags := uint32(windows.CREATE_SUSPENDED)
+	commandLine, _ := windows.UTF16PtrFromString(exe)
+	var startupInfo windows.StartupInfo
+	var processInfo windows.ProcessInformation
+	startupInfo.Cb = uint32(unsafe.Sizeof(startupInfo))
+	creationFlags := uint32(windows.CREATE_SUSPENDED)
 
-    err := windows.CreateProcess(
-        nil,                       // Application name
-        commandLine,               // Command line
-        nil,                       // Process security attributes
-        nil,                       // Primary thread security attributes
-        false,                     // Handles are not inherited
-        creationFlags,             // Creation flags
-        nil,                       // Use parent's environment
-        nil,                       // Use parent's current directory
-        &startupInfo,              // Pointer to STARTUPINFO
-        &processInfo,              // Pointer to PROCESS_INFORMATION
-    )
-    if err != nil {
-        panic(err)
-    }
+	err := windows.CreateProcess(
+		nil,           // Application name
+		commandLine,   // Command line
+		nil,           // Process security attributes
+		nil,           // Primary thread security attributes
+		false,         // Handles are not inherited
+		creationFlags, // Creation flags
+		nil,           // Use parent's environment
+		nil,           // Use parent's current directory
+		&startupInfo,  // Pointer to STARTUPINFO
+		&processInfo,  // Pointer to PROCESS_INFORMATION
+	)
+	if err != nil {
+		panic(err)
+	}
 
-    return &Process{
-        Handle: processInfo.Process,
-        Pid:    processInfo.ProcessId,
-        Access: PROCESS_ALL_ACCESS,
-        suspended: true,
-    }
+	return &Process{
+		Handle:    processInfo.Process,
+		Pid:       processInfo.ProcessId,
+		Access:    PROCESS_ALL_ACCESS,
+		suspended: true,
+	}
 }
 
 func (p *Process) IsSuspended() bool {
-    return p.suspended
+	return p.suspended
 }
 
 // reopen if the process is not already opened with the given access rights
@@ -141,40 +141,40 @@ func CreateProcess(path string, args []string, opts ...CreateProcessOption) Proc
 }
 
 func (p *Process) Suspend() {
-    snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
-    if err != nil {
-        panic(fmt.Errorf("CreateToolhelp32Snapshot: %w", err))
-    }
-    defer windows.CloseHandle(snapshot)
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		panic(fmt.Errorf("CreateToolhelp32Snapshot: %w", err))
+	}
+	defer windows.CloseHandle(snapshot)
 
-    var te windows.ThreadEntry32
-    te.Size = uint32(unsafe.Sizeof(te))
-    if err = windows.Thread32First(snapshot, &te); err != nil {
-        panic(fmt.Errorf("Thread32First: %w", err))
-    }
+	var te windows.ThreadEntry32
+	te.Size = uint32(unsafe.Sizeof(te))
+	if err = windows.Thread32First(snapshot, &te); err != nil {
+		panic(fmt.Errorf("Thread32First: %w", err))
+	}
 
-    for {
-        if te.OwnerProcessID == p.Pid {
-            th, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, te.ThreadID)
-            if err != nil {
-                panic(fmt.Errorf("OpenThread: %w", err))
-            }
-            _, err = SuspendThread(th)
-            if err != nil {
-                panic(fmt.Errorf("SuspendThread: %w", err))
-            }
-            windows.CloseHandle(th)
-        }
+	for {
+		if te.OwnerProcessID == p.Pid {
+			th, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, te.ThreadID)
+			if err != nil {
+				panic(fmt.Errorf("OpenThread: %w", err))
+			}
+			_, err = SuspendThread(th)
+			if err != nil {
+				panic(fmt.Errorf("SuspendThread: %w", err))
+			}
+			windows.CloseHandle(th)
+		}
 
-        if err = windows.Thread32Next(snapshot, &te); err != nil {
-            if err == windows.ERROR_NO_MORE_FILES {
-                break
-            }
-            panic(fmt.Errorf("Thread32Next: %w", err))
-        }
-    }
+		if err = windows.Thread32Next(snapshot, &te); err != nil {
+			if err == windows.ERROR_NO_MORE_FILES {
+				break
+			}
+			panic(fmt.Errorf("Thread32Next: %w", err))
+		}
+	}
 
-    p.suspended = true
+	p.suspended = true
 }
 
 // resumes a suspended process by resuming all of its threads.
@@ -212,7 +212,7 @@ func (p *Process) Resume() {
 		}
 	}
 
-    p.suspended = false
+	p.suspended = false
 }
 
 // closes the process handle, but does not terminate the process
@@ -354,4 +354,3 @@ func (p *Process) Modules() []Module {
 
 	return modules
 }
-

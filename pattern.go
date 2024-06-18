@@ -45,75 +45,75 @@ func (p Pattern) Find(buffer []byte) int {
 }
 
 func (p Pattern) Patch(buffer []byte, offset int) {
-    for i := 0; i < len(p.data); i++ {
-        if p.data[i] != -1 {
-            buffer[offset+i] = byte(p.data[i])
-        }
-    }
+	for i := 0; i < len(p.data); i++ {
+		if p.data[i] != -1 {
+			buffer[offset+i] = byte(p.data[i])
+		}
+	}
 }
 
 func (p *Pattern) FromArgs(args []string) {
-    s := ""
-    for i, arg := range args {
-        switch len(arg) {
-        case 1:
-            if arg == "?" {
-                s += "??"
-            } else {
-                s += "0" + arg
-            } 
+	s := ""
+	for i, arg := range args {
+		switch len(arg) {
+		case 1:
+			if arg == "?" {
+				s += "??"
+			} else {
+				s += "0" + arg
+			}
 
-        case 2:
-            s += arg
+		case 2:
+			s += arg
 
-        default:
-            panic(fmt.Sprintf("Pattern::FromArgs: invalid argument %d: \"%s\"", i, arg))
-        }
-    }
-    p.FromHexString(s)
+		default:
+			panic(fmt.Sprintf("Pattern::FromArgs: invalid argument %d: \"%s\"", i, arg))
+		}
+	}
+	p.FromHexString(s)
 }
 
 func (p *Pattern) FromHexString(s string) {
-    s = strings.ReplaceAll(s, " ", "")
-    if len(s)%2 != 0 {
-        panic("Pattern::FromHexString: odd length")
-    }
-    if len(s) == 0 {
-        panic("Pattern::FromHexString: empty string")
-    }
+	s = strings.ReplaceAll(s, " ", "")
+	if len(s)%2 != 0 {
+		panic("Pattern::FromHexString: odd length")
+	}
+	if len(s) == 0 {
+		panic("Pattern::FromHexString: empty string")
+	}
 
-    p.data = []int{}
-    for i := 0; i < len(s); i += 2 {
-        b := s[i:i+2]
-        if b == "??" {
-            p.data = append(p.data, -1)
-        } else {
-            x, err := strconv.ParseUint(b, 16, 8)
-            if err != nil {
-                panic(err)
-            }
-            p.data = append(p.data, int(x))
-        }
-    }
+	p.data = []int{}
+	for i := 0; i < len(s); i += 2 {
+		b := s[i : i+2]
+		if b == "??" {
+			p.data = append(p.data, -1)
+		} else {
+			x, err := strconv.ParseUint(b, 16, 8)
+			if err != nil {
+				panic(err)
+			}
+			p.data = append(p.data, int(x))
+		}
+	}
 }
 
 func (p *Pattern) FromAnsiString(s string) {
-    p.data = []int{}
-    for _, c := range s {
-        p.data = append(p.data, int(c))
-    }
+	p.data = []int{}
+	for _, c := range s {
+		p.data = append(p.data, int(c))
+	}
 }
 
 func (p *Pattern) FromUnicodeString(s string) {
-    p.data = []int{}
-    for _, c := range s {
-        p.data = append(p.data, int(c))
-        p.data = append(p.data, 0)
-    }
+	p.data = []int{}
+	for _, c := range s {
+		p.data = append(p.data, int(c))
+		p.data = append(p.data, 0)
+	}
 }
 
 func ParsePattern(src string) Pattern {
 	p := Pattern{}
-    p.FromHexString(src)
+	p.FromHexString(src)
 	return p
 }

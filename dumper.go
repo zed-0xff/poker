@@ -3,7 +3,8 @@ package poker
 import (
 	"fmt"
 	"os"
-    "strconv"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -18,11 +19,11 @@ var Verbosity = 0
 var g_buffer = []byte{}
 
 func PtrFmtSize() int {
-    if unsafe.Sizeof(uintptr(0)) == 8 {
-        return 12
-    } else {
-        return 8
-    }
+	if unsafe.Sizeof(uintptr(0)) == 8 {
+		return 12
+	} else {
+		return 8
+	}
 }
 
 func prot2ext(prot uint32) string {
@@ -47,7 +48,7 @@ func prot2ext(prot uint32) string {
 	if prot&windows.PAGE_EXECUTE_WRITECOPY != 0 { // is it rwx ?
 		return "rwx"
 	}
-    return "bin"
+	return "bin"
 }
 
 func prot2str(prot uint32) string {
@@ -140,17 +141,17 @@ func WriteFile(fname string, data []byte) error {
 }
 
 func (process *Process) DumpRange(start uintptr, end uintptr, sparse bool) {
-    if( start == 0 && end == ^uintptr(0) ) {
-        fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", process.Pid)
-    } else {
-        fmt.Printf("[.] Dumping range %x-%x of PID %d ..\n", start, end, process.Pid)
-    }
+	if start == 0 && end == ^uintptr(0) {
+		fmt.Printf("[.] Dumping all READABLE regions of PID %d ..\n", process.Pid)
+	} else {
+		fmt.Printf("[.] Dumping range %x-%x of PID %d ..\n", start, end, process.Pid)
+	}
 
-    fname := ""
-    if sparse {
-        fname = fmt.Sprintf("pid_%d_sparse.bin", process.Pid)
-        CreateSparseFile(fname)
-    }
+	fname := ""
+	if sparse {
+		fname = fmt.Sprintf("pid_%d_sparse.bin", process.Pid)
+		CreateSparseFile(fname)
+	}
 
 	totalWritten := 0
 
@@ -158,44 +159,84 @@ func (process *Process) DumpRange(start uintptr, end uintptr, sparse bool) {
 		if !region.IsReadable() {
 			continue
 		}
-        if start != 0 && (region.MBI.BaseAddress + uintptr(region.MBI.RegionSize)) < start {
-            continue
-        }
-        if end != ^uintptr(0) && region.MBI.BaseAddress >= end {
-            continue
-        }
+		if start != 0 && (region.MBI.BaseAddress+uintptr(region.MBI.RegionSize)) < start {
+			continue
+		}
+		if end != ^uintptr(0) && region.MBI.BaseAddress >= end {
+			continue
+		}
 
 		region.Show()
 
-        if sparse {
-            WriteFileEx(fname, region.ReadAll(), os.O_WRONLY|os.O_CREATE, int(region.MBI.BaseAddress))
-        } else {
-            fname := fmt.Sprintf("%0*x.%s", PtrFmtSize(), region.MBI.BaseAddress, prot2ext(region.MBI.Protect))
-            if region.Module != nil && region.Module.Name != "" {
-                moduleName := region.Module.Name
-                moduleName = strings.Replace(moduleName, ".dll", "", -1)
-                moduleName = strings.Replace(moduleName, ".exe", "", -1)
-                if moduleName != "" {
-                    fname = fmt.Sprintf("%0*x_%s.%s", PtrFmtSize(), region.MBI.BaseAddress, moduleName, prot2ext(region.MBI.Protect))
-                }
-            }
-            err := WriteFile(fname, region.ReadAll())
-            if err != nil {
-                panic(err)
-            }
-        }
+		if sparse {
+			WriteFileEx(fname, region.ReadAll(), os.O_WRONLY|os.O_CREATE, int(region.MBI.BaseAddress))
+		} else {
+			fname := fmt.Sprintf("%0*x.%s", PtrFmtSize(), region.MBI.BaseAddress, prot2ext(region.MBI.Protect))
+			if region.Module != nil && region.Module.Name != "" {
+				moduleName := region.Module.Name
+				moduleName = strings.Replace(moduleName, ".dll", "", -1)
+				moduleName = strings.Replace(moduleName, ".exe", "", -1)
+				if moduleName != "" {
+					fname = fmt.Sprintf("%0*x_%s.%s", PtrFmtSize(), region.MBI.BaseAddress, moduleName, prot2ext(region.MBI.Protect))
+				}
+			}
+			err := WriteFile(fname, region.ReadAll())
+			if err != nil {
+				panic(err)
+			}
+		}
 		totalWritten += int(region.MBI.RegionSize)
 	}
 	fmt.Printf("[=] %s (%d bytes)\n", fname, totalWritten)
 }
 
-func (process *Process) DumpRegion(target_ea uintptr) {
-    fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, process.Pid)
+// enumerate regions, and call callback for each region, if callback returns true - dump the region
+func (process *Process) DumpIf(dumpDir string, callback func(*Region, []byte) bool) int {
+	totalWritten := 0
+	dir_created := false
 
 	for _, region := range process.Regions() {
-        if target_ea < region.MBI.BaseAddress || target_ea >= region.MBI.BaseAddress+uintptr(region.MBI.RegionSize) {
-            continue
-        }
+		if !region.IsReadable() {
+			continue
+		}
+
+		data := region.ReadAll()
+		if !callback(&region, data) {
+			continue
+		}
+
+		region.Show()
+
+		fname := fmt.Sprintf("%0*x.%s", PtrFmtSize(), region.MBI.BaseAddress, prot2ext(region.MBI.Protect))
+		if region.Module != nil && region.Module.Name != "" {
+			moduleName := region.Module.Name
+			moduleName = strings.Replace(moduleName, ".dll", "", -1)
+			moduleName = strings.Replace(moduleName, ".exe", "", -1)
+			if moduleName != "" {
+				fname = fmt.Sprintf("%0*x_%s.%s", PtrFmtSize(), region.MBI.BaseAddress, moduleName, prot2ext(region.MBI.Protect))
+			}
+		}
+		if !dir_created {
+			os.MkdirAll(dumpDir, 0755)
+			dir_created = true
+		}
+		fname = filepath.Join(dumpDir, fname)
+		err := WriteFile(fname, data)
+		if err != nil {
+			panic(err)
+		}
+		totalWritten += int(region.MBI.RegionSize)
+	}
+	return totalWritten
+}
+
+func (process *Process) DumpRegion(target_ea uintptr) {
+	fmt.Printf("[.] Dumping region %x of PID %d ..\n", target_ea, process.Pid)
+
+	for _, region := range process.Regions() {
+		if target_ea < region.MBI.BaseAddress || target_ea >= region.MBI.BaseAddress+uintptr(region.MBI.RegionSize) {
+			continue
+		}
 
 		region.Show()
 
@@ -273,19 +314,19 @@ func (process *Process) FindEach(pattern Pattern) chan uintptr {
 			}
 
 			data := region.ReadAll()
-            index := 0
-            for {
-                // Find method now needs to handle repeated searches, starting from the index
-                offset := pattern.Find(data[index:])
-                if offset < 0 {
-                    break
-                }
-                // Calculate the real match address based on the base address and offset
-                matchAddress := region.MBI.BaseAddress + uintptr(index + offset)
-                ch <- matchAddress
-                // Move index past the current match for subsequent searches
-                index += offset + 1
-            }
+			index := 0
+			for {
+				// Find method now needs to handle repeated searches, starting from the index
+				offset := pattern.Find(data[index:])
+				if offset < 0 {
+					break
+				}
+				// Calculate the real match address based on the base address and offset
+				matchAddress := region.MBI.BaseAddress + uintptr(index+offset)
+				ch <- matchAddress
+				// Move index past the current match for subsequent searches
+				index += offset + 1
+			}
 		}
 		close(ch)
 	}()
