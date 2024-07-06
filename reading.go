@@ -2,6 +2,7 @@ package poker
 
 import (
 	"fmt"
+	"os"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -23,7 +24,7 @@ func (p *Process) ReadMemory(ea, size uintptr) []byte {
 		&bytesRead,
 	)
 	if err != nil {
-		panic(fmt.Errorf("ReadProcessMemory: %v", err))
+		fmt.Fprintf(os.Stderr, "[?] ReadProcessMemory: %v (ea=%x, size=%x, bytesRead=%x)\n", err, ea, size, bytesRead)
 	}
 
 	return buf[:bytesRead]
