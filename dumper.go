@@ -277,7 +277,7 @@ func (process *Process) ShowAllRegions() {
 }
 
 // zero region_type or region_prot means ANY READABLE region
-func (process *Process) FindFirstEx(region_type uint32, region_prot uint32, pattern Pattern) []byte {
+func (process *Process) FindFirstEx(region_type uint32, region_prot uint32, pattern Pattern) uintptr {
 	for _, region := range process.Regions() {
 		if !region.IsReadable() {
 			continue
@@ -298,7 +298,7 @@ func (process *Process) FindFirstEx(region_type uint32, region_prot uint32, patt
 				fmt.Printf("[=] Found:\n")
 				HexDump(data[offset:offset+pattern.Length()], ea)
 			}
-			return data[offset : offset+pattern.Length()]
+			return uintptr(offset) + region.MBI.BaseAddress
 		}
 	}
 
@@ -306,7 +306,7 @@ func (process *Process) FindFirstEx(region_type uint32, region_prot uint32, patt
 		fmt.Printf("[!] pattern not found: %s\n", pattern)
 		os.Exit(1)
 	}
-	return nil
+	return 0
 }
 
 // generator

@@ -26,14 +26,16 @@ var g_wait = false
 var g_needResume = false
 var g_pid uint32 = 0
 var g_process *poker.Process = nil
+var g_lastAddr uintptr = 0
 
 var g_rangeStart uintptr = 0
 var g_rangeEnd uintptr = 0
 var g_uniq bool = false
 
 // extras:
-//   - '_' can be used as a visual separator
-//   - '+' can be used for basic arithmetics
+//   '_' - visual separator
+//   '+' - basic arithmetics
+//   '$' = g_lastAddr
 func parseHex(s string, title string) uint64 {
 	if strings.HasPrefix(s, "0x") {
 		s = s[2:]
@@ -43,12 +45,19 @@ func parseHex(s string, title string) uint64 {
 	var result uint64
 
 	for _, part := range strings.Split(s, "+") {
-		val, err := strconv.ParseUint(part, 16, 64)
-		if err != nil {
-			fmt.Printf("[?] Invalid %s: %s\n", title, s)
-			os.Exit(1)
-		}
-		result += val
+        if part == "$" {
+            if g_lastAddr == 0 {
+                panic("parseHex: $ == 0")
+            }
+            result += uint64(g_lastAddr)
+        } else {
+            val, err := strconv.ParseUint(part, 16, 64)
+            if err != nil {
+                fmt.Printf("[?] Invalid %s: %s\n", title, s)
+                os.Exit(1)
+            }
+            result += val
+        }
 	}
 
 	return result
@@ -112,7 +121,18 @@ func openProcess() *poker.Process {
 }
 
 func regions(args []string) {
-	openProcess().ShowRegions()
+    process := openProcess()
+
+	fmt.Printf("[.] Memory regions of PID %d: (only MEM_COMMIT ones)\n", process.Pid)
+	for _, region := range process.Regions() {
+		if !region.IsCommitted() && poker.Verbosity < 1 {
+			continue
+		}
+
+        if g_rangeStart == 0 || rangesOverlap(region.MBI.BaseAddress, region.MBI.BaseAddress+region.MBI.RegionSize, g_rangeStart, g_rangeEnd) {
+            region.Show()
+        }
+	}
 }
 
 func dump(args []string) {
@@ -237,7 +257,26 @@ func find(args []string) {
 	var pattern poker.Pattern
 	pattern.FromHexString(args[0])
 	for match := range openProcess().FindEach(pattern) {
+        g_lastAddr = match
 		fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
+	}
+}
+
+func replaceAll(args []string) {
+	var old_bytes poker.Pattern
+	old_bytes.FromHexString(args[0])
+
+	var new_bytes poker.Pattern
+	new_bytes.FromHexString(args[1])
+
+    process := openProcess()
+	for match := range process.FindEach(old_bytes) {
+        g_lastAddr = match
+		fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
+
+        bytes := process.ReadMemory(match, uintptr(new_bytes.Length()))
+        new_bytes.Patch(bytes, 0)
+        process.WriteMemory(match, bytes)
 	}
 }
 
@@ -251,6 +290,7 @@ func findstr(args []string) {
 	}
 	pattern.FromUnicodeString(args[0])
 	for match := range process.FindEach(pattern) {
+        g_lastAddr = match
 		fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
 	}
 }
@@ -260,12 +300,27 @@ func findFirstEx(args []string) {
 	region_prot := parseHex(args[1], "region_prot")
 	var pattern poker.Pattern
 	pattern.FromHexString(strings.Join(args[2:], " "))
-	result := openProcess().FindFirstEx(uint32(region_type), uint32(region_prot), pattern)
-	if !poker.ScriptMode || g_debug {
-		if result != nil {
-			poker.HexDump(result, 0)
+
+	process := openProcess()
+    for {
+        match := process.FindFirstEx(uint32(region_type), uint32(region_prot), pattern)
+        if match != 0 {
+            g_lastAddr = match
+            if !poker.ScriptMode || g_debug {
+                fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
+            }
+            break
+        }
+		if g_wait {
+			if process.IsSuspended() {
+				process.Resume()
+			} else {
+				time.Sleep(1 * time.Millisecond)
+			}
+		} else {
+			break
 		}
-	}
+    }
 }
 
 func peek(args []string) {
@@ -448,6 +503,7 @@ func registerCommands() {
 	registerCommand("ps", 0, 0, ps)
 	registerCommand("read", 2, 2, read)
 	registerCommand("regions", 0, 0, regions)
+	registerCommand("replaceall", 2, 2, replaceAll)
 	registerCommand("resume", 0, 0, resume)
 	registerCommand("run", 1, 1, run)
 	registerCommand("suspend", 0, 0, suspend)

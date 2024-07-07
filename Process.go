@@ -71,7 +71,7 @@ func (p *Process) MaybeReopen(access uint32) *Process {
 	if p.Access&access == access {
 		return p
 	}
-	return p.Open(access)
+	return p.Open(access | p.Access)
 }
 
 // returns new Process object with the given access rights, inheriting the handle from the existing one
@@ -237,15 +237,17 @@ func (p *Process) VirtualAllocEx(addr uintptr, size int, allocType uint32, prote
 
 func (p *Process) VirtualQueryEx(addr uintptr) *MEMORY_BASIC_INFORMATION {
 	var mbi MEMORY_BASIC_INFORMATION
-	ret, _, _ := procVirtualQueryEx.Call(
+	ret, _, err := procVirtualQueryEx.Call(
 		uintptr(p.Handle),
 		addr,
 		uintptr(unsafe.Pointer(&mbi)),
 		uintptr(unsafe.Sizeof(mbi)),
 	)
 	if ret != uintptr(unsafe.Sizeof(mbi)) {
+        if Verbosity > 1 {
+            fmt.Println("[d] VirtualQueryEx: ret", ret, "err", err)
+        }
 		return nil
-		//panic(fmt.Errorf("VirtualQueryEx: %w", err))
 	}
 	return &mbi
 }

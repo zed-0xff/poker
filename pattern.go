@@ -75,15 +75,32 @@ func (p *Pattern) FromArgs(args []string) {
 
 func (p *Pattern) FromHexString(s string) {
 	s = strings.ReplaceAll(s, " ", "")
-	if len(s)%2 != 0 {
-		panic("Pattern::FromHexString: odd length")
-	}
+//	if len(s)%2 != 0 {
+//		panic("Pattern::FromHexString: odd length")
+//	}
 	if len(s) == 0 {
 		panic("Pattern::FromHexString: empty string")
 	}
 
 	p.data = []int{}
-	for i := 0; i < len(s); i += 2 {
+	for i := 0; i < len(s); i+=2 {
+        if s[i] == '{' {
+            // skip N bytes
+            j := strings.Index(s[i:], "}")
+            if j == -1 {
+                panic("Pattern::FromHexString: missing '}'")
+            }
+            nskip, err := strconv.ParseUint(s[i+1:i+j], 16, 8)
+            if err != nil {
+                panic(err)
+            }
+            for k := 0; k < int(nskip); k++ {
+                p.data = append(p.data, -1)
+            }
+            i += j - 1
+            continue
+        }
+
 		b := s[i : i+2]
 		if b == "??" {
 			p.data = append(p.data, -1)
