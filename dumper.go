@@ -200,15 +200,15 @@ func (process *Process) DumpIf(dumpDir string, callback func(*Region, []byte) bo
 			continue
 		}
 
-        // first call to callback to check if we should dump this region, without reading it
+		// first call to callback to check if we should dump this region, without reading it
 		if !callback(&region, nil) {
 			continue
 		}
 
 		data := region.ReadAll()
-        if data == nil || len(data) == 0 {
-            continue
-        }
+		if data == nil || len(data) == 0 {
+			continue
+		}
 
 		if !callback(&region, data) {
 			continue

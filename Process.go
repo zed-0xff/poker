@@ -244,9 +244,9 @@ func (p *Process) VirtualQueryEx(addr uintptr) *MEMORY_BASIC_INFORMATION {
 		uintptr(unsafe.Sizeof(mbi)),
 	)
 	if ret != uintptr(unsafe.Sizeof(mbi)) {
-        if Verbosity > 1 {
-            fmt.Println("[d] VirtualQueryEx: ret", ret, "err", err)
-        }
+		if Verbosity > 1 {
+			fmt.Println("[d] VirtualQueryEx: ret", ret, "err", err)
+		}
 		return nil
 	}
 	return &mbi

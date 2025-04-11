@@ -258,7 +258,9 @@ func find(args []string) {
 	pattern.FromHexString(args[0])
 	for match := range openProcess().FindEach(pattern) {
         g_lastAddr = match
-		fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
+        if poker.Verbosity >= 0 {
+            fmt.Printf("%0*x\n", poker.PtrFmtSize(), match)
+        }
 	}
 }
 
@@ -332,13 +334,26 @@ func peek(args []string) {
 	poker.HexDump(openProcess().ReadMemory(ea, size), ea)
 }
 
+// args: ea, size, [filename]
 func read(args []string) {
 	result := openProcess().ReadMemory(uintptr(parseHex(args[0], "ea")), uintptr(parseHex(args[1], "size")))
-	if !poker.ScriptMode {
-		if result != nil {
-			os.Stdout.Write(result)
-		}
-	}
+    if result == nil {
+        return
+    }
+
+    if len(args) == 3 {
+        filename := args[2]
+        f, err := os.Create(filename)
+        if err != nil {
+            panic(err)
+        }
+        defer f.Close()
+        f.Write(result)
+    } else {
+        if !poker.ScriptMode {
+            os.Stdout.Write(result)
+        }
+    }
 }
 
 func patch(args []string) {
@@ -501,7 +516,7 @@ func registerCommands() {
 	registerCommand("poke", 2, -1, poke)
 	registerCommand("poke32", 2, 2, poke32)
 	registerCommand("ps", 0, 0, ps)
-	registerCommand("read", 2, 2, read)
+	registerCommand("read", 2, 3, read)
 	registerCommand("regions", 0, 0, regions)
 	registerCommand("replaceall", 2, 2, replaceAll)
 	registerCommand("resume", 0, 0, resume)
